@@ -34,3 +34,4 @@ tests/utils/*.jpeg
 dist/
 build/
 accounts.json
+codex-accounts.json
