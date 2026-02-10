@@ -1,0 +1,47 @@
+{
+  "name": "antigravity-claude-proxy",
+  "version": "2.5.0",
+  "description": "Proxy server to use Antigravity's Claude models with Claude Code CLI",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "accounts": "node src/cli/accounts.js",
+    "accounts:add": "node src/cli/accounts.js add",
+    "accounts:list": "node src/cli/accounts.js list",
+    "accounts:remove": "node src/cli/accounts.js remove",
+    "accounts:verify": "node src/cli/accounts.js verify",
+    "codex:accounts": "node src/cli/codex-accounts.js",
+    "codex:accounts:add": "node src/cli/codex-accounts.js add",
+    "codex:accounts:list": "node src/cli/codex-accounts.js list",
+    "codex:accounts:remove": "node src/cli/codex-accounts.js remove",
+    "codex:accounts:clear": "node src/cli/codex-accounts.js clear"
+  },
+  "keywords": [
+    "claude",
+    "anthropic",
+    "antigravity",
+    "proxy",
+    "vertex-ai"
+  ],
+  "author": "Badri Narayanan",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/badri-s2001/antigravity-claude-proxy.git"
+  },
+  "homepage": "https://github.com/badri-s2001/antigravity-claude-proxy#readme",
+  "bugs": {
+    "url": "https://github.com/badri-s2001/antigravity-claude-proxy/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "async-mutex": "^0.5.0",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "undici": "^7.20.0"
+  }
+}
