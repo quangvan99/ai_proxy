@@ -6,7 +6,7 @@
 
 import { ACCOUNT_CONFIG_PATH } from '../constants.js';
 import { config } from '../config.js';
-import { loadAccounts, loadDefaultAccount, saveAccounts } from './storage.js';
+import { loadAccounts, saveAccounts } from './storage.js';
 import {
     isAllRateLimited as checkAllRateLimited,
     getAvailableAccounts as getAvailable,
@@ -32,7 +32,7 @@ import {
     clearProjectCache as clearProject,
     clearTokenCache as clearToken
 } from './credentials.js';
-import { createStrategy, getStrategyLabel, DEFAULT_STRATEGY } from './strategies/index.js';
+import { createStrategy, getStrategyLabel } from './strategies/index.js';
 import { logger } from '../utils/logger.js';
 
 export class AccountManager {
@@ -42,7 +42,7 @@ export class AccountManager {
     #settings = {};
     #initialized = false;
     #strategy = null;
-    #strategyName = DEFAULT_STRATEGY;
+    #strategyName = 'hybrid';
 
     // Per-account caches
     #tokenCache = new Map(); // email -> { token, extractedAt }
@@ -69,12 +69,10 @@ export class AccountManager {
         this.#settings = settings;
         this.#currentIndex = activeIndex;
 
-        // If config exists but has no accounts, fall back to Antigravity database
+        // Validate we have at least one account
         if (this.#accounts.length === 0) {
-            logger.warn('[AccountManager] No accounts in config. Falling back to Antigravity database');
-            const { accounts: defaultAccounts, tokenCache } = loadDefaultAccount();
-            this.#accounts = defaultAccounts;
-            this.#tokenCache = tokenCache;
+            logger.error('[AccountManager] No accounts configured. Please add accounts using: npm run accounts:add');
+            throw new Error('No accounts configured. Run: npm run accounts:add');
         }
 
         // Determine strategy: CLI override > env var > config file > default

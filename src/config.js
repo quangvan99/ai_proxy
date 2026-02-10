@@ -31,7 +31,6 @@ function deepMerge(target, source) {
 // Default config
 const DEFAULT_CONFIG = {
     apiKey: '',
-    webuiPassword: '',
     debug: false,
     devMode: false,
     logLevel: 'info',
@@ -51,9 +50,9 @@ const DEFAULT_CONFIG = {
     switchAccountDelayMs: 5000,    // Delay before switching accounts on rate limit
     capacityBackoffTiersMs: [5000, 10000, 20000, 30000, 60000], // Progressive backoff tiers for capacity exhaustion
     modelMapping: {},
-    // Account selection strategy configuration
+    // Account selection strategy configuration (only Hybrid is supported)
     accountSelection: {
-        strategy: 'hybrid',           // 'sticky' | 'round-robin' | 'hybrid'
+        strategy: 'hybrid',           // Only 'hybrid' (Smart Distribution) is supported
         // Hybrid strategy tuning (optional - sensible defaults)
         healthScore: {
             initial: 70,              // Starting score for new accounts
@@ -121,7 +120,6 @@ function loadConfig() {
 
         // Environment overrides
         if (process.env.API_KEY) config.apiKey = process.env.API_KEY;
-        if (process.env.WEBUI_PASSWORD) config.webuiPassword = process.env.WEBUI_PASSWORD;
         if (process.env.DEBUG === 'true') config.debug = true;
         if (process.env.DEV_MODE === 'true') config.devMode = true;
 
@@ -141,7 +139,6 @@ export function getPublicConfig() {
     const publicConfig = JSON.parse(JSON.stringify(config));
 
     // Redact sensitive values
-    if (publicConfig.webuiPassword) publicConfig.webuiPassword = '********';
     if (publicConfig.apiKey) publicConfig.apiKey = '********';
 
     return publicConfig;

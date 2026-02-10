@@ -8,7 +8,6 @@ import { readFile, writeFile, mkdir, access } from 'fs/promises';
 import { constants as fsConstants } from 'fs';
 import { dirname } from 'path';
 import { ACCOUNT_CONFIG_PATH } from '../constants.js';
-import { getAuthStatus } from '../auth/database.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -54,46 +53,12 @@ export async function loadAccounts(configPath = ACCOUNT_CONFIG_PATH) {
     } catch (error) {
         if (error.code === 'ENOENT') {
             // No config file - return empty
-            logger.info('[AccountManager] No config file found. Using Antigravity database (single account mode)');
+            logger.warn('[AccountManager] No config file found. Please add accounts using: npm run accounts:add');
         } else {
             logger.error('[AccountManager] Failed to load config:', error.message);
         }
         return { accounts: [], settings: {}, activeIndex: 0 };
     }
-}
-
-/**
- * Load the default account from Antigravity's database
- *
- * @param {string} dbPath - Optional path to the database
- * @returns {{accounts: Array, tokenCache: Map}}
- */
-export function loadDefaultAccount(dbPath) {
-    try {
-        const authData = getAuthStatus(dbPath);
-        if (authData?.apiKey) {
-            const account = {
-                email: authData.email || 'default@antigravity',
-                source: 'database',
-                lastUsed: null,
-                modelRateLimits: {}
-            };
-
-            const tokenCache = new Map();
-            tokenCache.set(account.email, {
-                token: authData.apiKey,
-                extractedAt: Date.now()
-            });
-
-            logger.info(`[AccountManager] Loaded default account: ${account.email}`);
-
-            return { accounts: [account], tokenCache };
-        }
-    } catch (error) {
-        logger.error('[AccountManager] Failed to load default account:', error.message);
-    }
-
-    return { accounts: [], tokenCache: new Map() };
 }
 
 /**

@@ -5,7 +5,6 @@
  */
 
 import {
-    ANTIGRAVITY_DB_PATH,
     TOKEN_REFRESH_INTERVAL_MS,
     LOAD_CODE_ASSIST_ENDPOINTS,
     LOAD_CODE_ASSIST_HEADERS,
@@ -13,7 +12,6 @@ import {
     DEFAULT_PROJECT_ID
 } from '../constants.js';
 import { refreshAccessToken, parseRefreshParts, formatRefreshParts } from '../auth/oauth.js';
-import { getAuthStatus } from '../auth/database.js';
 import { logger } from '../utils/logger.js';
 import { isNetworkError } from '../utils/helpers.js';
 import { onboardUser, getDefaultTierId } from './onboarding.js';
@@ -102,10 +100,7 @@ export async function getTokenForAccount(account, tokenCache, onInvalid, onSave)
     } else if (account.source === 'manual' && account.apiKey) {
         token = account.apiKey;
     } else {
-        // Extract from database
-        const dbPath = account.dbPath || ANTIGRAVITY_DB_PATH;
-        const authData = getAuthStatus(dbPath);
-        token = authData.apiKey;
+        throw new Error(`Invalid account source: ${account.source}. Account must have 'oauth' or 'manual' source.`);
     }
 
     // Cache the token

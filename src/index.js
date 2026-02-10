@@ -10,7 +10,7 @@ import app, { accountManager } from './server.js';
 import { DEFAULT_PORT } from './constants.js';
 import { logger } from './utils/logger.js';
 import { config } from './config.js';
-import { getStrategyLabel, STRATEGY_NAMES, DEFAULT_STRATEGY } from './account-manager/strategies/index.js';
+import { getStrategyLabel } from './account-manager/strategies/index.js';
 import { getPackageVersion } from './utils/helpers.js';
 import path from 'path';
 import os from 'os';
@@ -20,22 +20,8 @@ const packageVersion = getPackageVersion();
 // Parse command line arguments
 const args = process.argv.slice(2);
 const isDebug = args.includes('--debug') || args.includes('--dev-mode') || process.env.DEBUG === 'true' || process.env.DEV_MODE === 'true';
-const isFallbackEnabled = args.includes('--fallback') || process.env.FALLBACK === 'true';
 
-// Parse --strategy flag (format: --strategy=sticky or --strategy sticky)
-let strategyOverride = null;
-for (let i = 0; i < args.length; i++) {
-    if (args[i].startsWith('--strategy=')) {
-        strategyOverride = args[i].split('=')[1];
-    } else if (args[i] === '--strategy' && args[i + 1]) {
-        strategyOverride = args[i + 1];
-    }
-}
-// Validate strategy
-if (strategyOverride && !STRATEGY_NAMES.includes(strategyOverride.toLowerCase())) {
-    logger.warn(`[Startup] Invalid strategy "${strategyOverride}". Valid options: ${STRATEGY_NAMES.join(', ')}. Using default.`);
-    strategyOverride = null;
-}
+// Note: --strategy flag is ignored, only Hybrid Strategy is supported
 
 // Initialize logger and devMode
 logger.setDebug(isDebug);
@@ -46,13 +32,6 @@ if (isDebug) {
     logger.debug('Developer mode enabled');
 }
 
-if (isFallbackEnabled) {
-    logger.info('Model fallback mode enabled');
-}
-
-// Export fallback flag for server to use
-export const FALLBACK_ENABLED = isFallbackEnabled;
-
 const PORT = process.env.PORT || DEFAULT_PORT;
 const HOST = process.env.HOST || '0.0.0.0';
 
@@ -60,9 +39,8 @@ if (process.env.HOST) {
     logger.info(`[Startup] Using HOST environment variable: ${process.env.HOST}`);
 }
 
-// Home directory for account storage
-const HOME_DIR = os.homedir();
-const CONFIG_DIR = path.join(HOME_DIR, '.antigravity-claude-proxy');
+// Account storage directory
+const STORAGE_DIR = process.cwd();
 
 const server = app.listen(PORT, HOST, () => {
     // Get actual bound address
@@ -79,21 +57,14 @@ const server = app.listen(PORT, HOST, () => {
     const align4 = (text) => text + ' '.repeat(Math.max(0, 58 - text.length));
 
     // Build Control section dynamically
-    const strategyOptions = `(${STRATEGY_NAMES.join('/')})`;
-    const strategyLine2 = '                       ' + strategyOptions;
     let controlSection = '║  Control:                                                    ║\n';
-    controlSection += '║    --strategy=<s>     Set account selection strategy         ║\n';
-    controlSection += `${border}  ${align(strategyLine2)}${border}\n`;
     if (!isDebug) {
         controlSection += '║    --dev-mode         Enable developer mode                  ║\n';
-    }
-    if (!isFallbackEnabled) {
-        controlSection += '║    --fallback         Enable model fallback on quota exhaust ║\n';
     }
     controlSection += '║    Ctrl+C             Stop server                            ║';
 
     // Get the strategy label (accountManager will be initialized by now)
-    const strategyLabel = accountManager.getStrategyLabel();
+    const strategyLabel = getStrategyLabel();
 
     // Build status section - always show strategy, plus any active modes
     let statusSection = '║                                                              ║\n';
@@ -102,12 +73,9 @@ const server = app.listen(PORT, HOST, () => {
     if (isDebug) {
         statusSection += '║    ✓ Developer mode enabled                                   ║\n';
     }
-    if (isFallbackEnabled) {
-        statusSection += '║    ✓ Model fallback enabled                                  ║\n';
-    }
 
     const environmentSection = `║  Environment Variables:                                      ║
-║    PORT                Server port (default: 8080)           ║
+║    PORT                Server port (default: 8386)           ║
 ║    HOST                Bind address (default: 0.0.0.0)       ║
 ║    HTTP_PROXY          Route requests through a proxy        ║
 ║    See README.md for detailed configuration examples         ║`
@@ -117,7 +85,7 @@ const server = app.listen(PORT, HOST, () => {
 ║            Antigravity Claude Proxy Server v${packageVersion}            ║
 ╠══════════════════════════════════════════════════════════════╣
 ║                                                              ║
-${border}  ${align(`Server and WebUI running at: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`)}${border}
+${border}  ${align(`Server running at: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`)}${border}
 ${border}  ${align(`Bound to: ${boundHost}:${boundPort}`)}${border}
 ${statusSection}║                                                              ║
 ${controlSection}
@@ -130,7 +98,7 @@ ${controlSection}
 ║    POST /refresh-token       - Force token refresh           ║
 ║                                                              ║
 ${border}  ${align(`Configuration:`)}${border}
-${border}    ${align4(`Storage: ${CONFIG_DIR}`)}${border}
+${border}    ${align4(`Storage: ${STORAGE_DIR}`)}${border}
 ║                                                              ║
 ║  Usage with Claude Code:                                     ║
 ${border}    ${align4(`export ANTHROPIC_BASE_URL=http://localhost:${PORT}`)}${border}
@@ -139,10 +107,6 @@ ${border}    ${align4(`export ANTHROPIC_API_KEY=${config.apiKey || 'dummy'}`)}${
 ║                                                              ║
 ║  Add Google accounts:                                        ║
 ║    npm run accounts                                          ║
-║                                                              ║
-║  Prerequisites (if no accounts configured):                  ║
-║    - Antigravity must be running                             ║
-║    - Have a chat panel open in Antigravity                   ║
 ║                                                              ║
 ${environmentSection}
 ╚══════════════════════════════════════════════════════════════╝

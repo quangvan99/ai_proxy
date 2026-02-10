@@ -6,35 +6,13 @@
 
 import express from 'express';
 import cors from 'cors';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import { sendMessage, sendMessageStream, listModels, getModelQuotas, getSubscriptionTier, isValidModel } from './cloudcode/index.js';
-import { mountWebUI } from './webui/index.js';
 import { config } from './config.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-import { forceRefresh } from './auth/token-extractor.js';
 import { REQUEST_BODY_LIMIT } from './constants.js';
 import { AccountManager } from './account-manager/index.js';
 import { clearThinkingSignatureCache } from './format/signature-cache.js';
 import { formatDuration } from './utils/helpers.js';
 import { logger } from './utils/logger.js';
-import usageStats from './modules/usage-stats.js';
-
-// Parse fallback flag directly from command line args to avoid circular dependency
-const args = process.argv.slice(2);
-const FALLBACK_ENABLED = args.includes('--fallback') || process.env.FALLBACK === 'true';
-
-// Parse --strategy flag (format: --strategy=sticky or --strategy sticky)
-let STRATEGY_OVERRIDE = null;
-for (let i = 0; i < args.length; i++) {
-    if (args[i].startsWith('--strategy=')) {
-        STRATEGY_OVERRIDE = args[i].split('=')[1];
-    } else if (args[i] === '--strategy' && args[i + 1]) {
-        STRATEGY_OVERRIDE = args[i + 1];
-    }
-}
 
 const app = express();
 
@@ -46,7 +24,6 @@ export const accountManager = new AccountManager();
 
 // Track initialization status
 let isInitialized = false;
-let initError = null;
 let initPromise = null;
 
 /**
@@ -60,12 +37,11 @@ async function ensureInitialized() {
 
     initPromise = (async () => {
         try {
-            await accountManager.initialize(STRATEGY_OVERRIDE);
+            await accountManager.initialize();
             isInitialized = true;
             const status = accountManager.getStatus();
             logger.success(`[Server] Account pool initialized: ${status.summary}`);
         } catch (error) {
-            initError = error;
             initPromise = null; // Allow retry on failure
             logger.error('[Server] Failed to initialize account manager:', error.message);
             throw error;
@@ -110,9 +86,6 @@ app.use('/v1', (req, res, next) => {
     next();
 });
 
-// Setup usage statistics middleware
-usageStats.setupMiddleware(app);
-
 /**
  * Silent handler for Claude Code CLI root POST requests
  * Claude Code sends heartbeat/event requests to POST / which we don't need
@@ -130,9 +103,6 @@ app.use((req, res, next) => {
     next();
 });
 
-// Mount WebUI (optional web interface for account management)
-mountWebUI(app, __dirname, accountManager);
-
 /**
  * Parse error message to extract error type, status code, and user-friendly message
  */
@@ -144,7 +114,7 @@ function parseError(error) {
     if (error.message.includes('401') || error.message.includes('UNAUTHENTICATED')) {
         errorType = 'authentication_error';
         statusCode = 401;
-        errorMessage = 'Authentication failed. Make sure Antigravity is running with a valid token.';
+        errorMessage = 'Authentication failed. Please check your Google account credentials.';
     } else if (error.message.includes('429') || error.message.includes('RESOURCE_EXHAUSTED') || error.message.includes('QUOTA_EXHAUSTED')) {
         errorType = 'invalid_request_error';  // Use invalid_request_error to force client to purge/stop
         statusCode = 400;  // Use 400 to ensure client does not retry (429 and 529 trigger retries)
@@ -168,7 +138,7 @@ function parseError(error) {
     } else if (error.message.includes('All endpoints failed')) {
         errorType = 'api_error';
         statusCode = 503;
-        errorMessage = 'Unable to connect to Claude API. Check that Antigravity is running.';
+        errorMessage = 'Unable to connect to Cloud Code API. Please check your network connection.';
     } else if (error.message.includes('PERMISSION_DENIED')) {
         errorType = 'permission_error';
         statusCode = 403;
@@ -598,11 +568,6 @@ app.get('/account-limits', async (req, res) => {
             })
         };
 
-        // Optionally include usage history (for dashboard performance optimization)
-        if (includeHistory) {
-            responseData.history = usageStats.getHistory();
-        }
-
         res.json(responseData);
     } catch (error) {
         res.status(500).json({
@@ -621,12 +586,9 @@ app.post('/refresh-token', async (req, res) => {
         // Clear all caches
         accountManager.clearTokenCache();
         accountManager.clearProjectCache();
-        // Force refresh default token
-        const token = await forceRefresh();
         res.json({
             status: 'ok',
-            message: 'Token caches cleared and refreshed',
-            tokenPrefix: token.substring(0, 10) + '...'
+            message: 'Token caches cleared'
         });
     } catch (error) {
         res.status(500).json({
@@ -790,7 +752,7 @@ app.post('/v1/messages', async (req, res) => {
 
             try {
                 // Initialize the generator
-                const generator = sendMessageStream(request, accountManager, FALLBACK_ENABLED);
+                const generator = sendMessageStream(request, accountManager);
                 
                 // BUFFERING STRATEGY:
                 // Pull the first event *before* sending headers. 
@@ -848,7 +810,7 @@ app.post('/v1/messages', async (req, res) => {
 
         } else {
             // Handle non-streaming response
-            const response = await sendMessage(request, accountManager, FALLBACK_ENABLED);
+            const response = await sendMessage(request, accountManager);
             res.json(response);
         }
 
@@ -857,17 +819,12 @@ app.post('/v1/messages', async (req, res) => {
 
         let { errorType, statusCode, errorMessage } = parseError(error);
 
-        // For auth errors, try to refresh token
+        // For auth errors, clear cache
         if (errorType === 'authentication_error') {
-            logger.warn('[API] Token might be expired, attempting refresh...');
-            try {
-                accountManager.clearProjectCache();
-                accountManager.clearTokenCache();
-                await forceRefresh();
-                errorMessage = 'Token was expired and has been refreshed. Please retry your request.';
-            } catch (refreshError) {
-                errorMessage = 'Could not refresh token. Make sure Antigravity is running.';
-            }
+            logger.warn('[API] Authentication error - clearing token cache');
+            accountManager.clearProjectCache();
+            accountManager.clearTokenCache();
+            errorMessage = 'Authentication failed. Please retry your request.';
         }
 
         logger.warn(`[API] Returning error response: ${statusCode} ${errorType} - ${errorMessage}`);
@@ -895,8 +852,6 @@ app.post('/v1/messages', async (req, res) => {
 /**
  * Catch-all for unsupported endpoints
  */
-usageStats.setupRoutes(app);
-
 app.use('*', (req, res) => {
     // Log 404s (use originalUrl since wildcard strips req.path)
     if (logger.isDebugEnabled) {

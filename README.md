@@ -40,7 +40,7 @@ A proxy server that exposes an **Anthropic-compatible API** backed by **Antigrav
 ```
 
 1. Receives requests in **Anthropic Messages API format**
-2. Uses OAuth tokens from added Google accounts (or Antigravity's local database)
+2. Uses OAuth tokens from added Google accounts
 3. Transforms to **Google Generative AI format** with Cloud Code wrapping
 4. Sends to Antigravity's Cloud Code API
 5. Converts responses back to **Anthropic format** with full thinking/streaming support
@@ -48,24 +48,13 @@ A proxy server that exposes an **Anthropic-compatible API** backed by **Antigrav
 ## Prerequisites
 
 - **Node.js** 18 or later
-- **Antigravity** installed (for single-account mode) OR Google account(s) for multi-account mode
+- Google account(s) for authentication
 
 ---
 
 ## Installation
 
-### Option 1: npm (Recommended)
-
-```bash
-# Run directly with npx (no install needed)
-npx antigravity-claude-proxy@latest start
-
-# Or install globally
-npm install -g antigravity-claude-proxy@latest
-antigravity-claude-proxy start
-```
-
-### Option 2: Clone Repository
+Clone the repository and install dependencies:
 
 ```bash
 git clone https://github.com/badri-s2001/antigravity-claude-proxy.git
@@ -81,62 +70,39 @@ npm start
 ### 1. Start the Proxy Server
 
 ```bash
-# If installed via npm
-antigravity-claude-proxy start
-
-# If using npx
-npx antigravity-claude-proxy@latest start
-
-# If cloned locally
 npm start
 ```
 
-The server runs on `http://localhost:8080` by default.
+The server runs on `http://localhost:8386` by default.
 
-### 2. Link Account(s)
+### 2. Add Google Account(s)
 
-Choose one of the following methods to authorize the proxy:
-
-#### **Method A: Web Dashboard (Recommended)**
-
-1. With the proxy running, open `http://localhost:8080` in your browser.
-2. Navigate to the **Accounts** tab and click **Add Account**.
-3. Complete the Google OAuth authorization in the popup window.
-
-> **Headless/Remote Servers**: If running on a server without a browser, the WebUI supports a "Manual Authorization" mode. After clicking "Add Account", you can copy the OAuth URL, complete authorization on your local machine, and paste the authorization code back.
-
-#### **Method B: CLI (Desktop or Headless)**
-
-If you prefer the terminal or are on a remote server:
+Add your Google account via OAuth:
 
 ```bash
 # Desktop (opens browser)
-antigravity-claude-proxy accounts add
+npm run accounts:add
 
-# Headless (Docker/SSH)
-antigravity-claude-proxy accounts add --no-browser
+# Headless (Docker/SSH) - manual OAuth code entry
+npm run accounts:add -- --no-browser
 ```
 
-> For full CLI account management options, run `antigravity-claude-proxy accounts --help`.
-
-#### **Method C: Automatic (Antigravity Users)**
-
-If you have the **Antigravity** app installed and logged in, the proxy will automatically detect your local session. No additional setup is required.
+> For full account management options, run `npm run accounts`.
 
 To use a custom port:
 
 ```bash
-PORT=3001 antigravity-claude-proxy start
+PORT=3001 npm start
 ```
 
 ### 3. Verify It's Working
 
 ```bash
 # Health check
-curl http://localhost:8080/health
+curl http://localhost:8386/health
 
 # Check account status and quota limits
-curl "http://localhost:8080/account-limits?format=table"
+curl "http://localhost:8386/account-limits?format=table"
 ```
 
 ---
@@ -145,22 +111,7 @@ curl "http://localhost:8080/account-limits?format=table"
 
 ### Configure Claude Code
 
-You can configure these settings in two ways:
-
-#### **Via Web Console (Recommended)**
-
-1. Open the WebUI at `http://localhost:8080`.
-2. Go to **Settings** → **Claude CLI**.
-3. Use the **Connection Mode** toggle to switch between:
-   - **Proxy Mode**: Uses the local proxy server (Antigravity Cloud Code). Configure models, base URL, and presets here.
-   - **Paid Mode**: Uses the official Anthropic Credits directly (requires your own subscription). This hides proxy settings to prevent accidental misconfiguration.
-4. Click **Apply to Claude CLI** to save your changes.
-
-> [!TIP] > **Configuration Precedence**: System environment variables (set in shell profile like `.zshrc`) take precedence over the `settings.json` file. If you use the Web Console to manage settings, ensure you haven't manually exported conflicting variables in your terminal.
-
-#### **Manual Configuration**
-
-Create or edit the Claude Code settings file:
+Edit the Claude Code settings file:
 
 **macOS:** `~/.claude/settings.json`
 **Linux:** `~/.claude/settings.json`
@@ -172,7 +123,7 @@ Add this configuration:
 {
   "env": {
     "ANTHROPIC_AUTH_TOKEN": "test",
-    "ANTHROPIC_BASE_URL": "http://localhost:8080",
+    "ANTHROPIC_BASE_URL": "http://localhost:8386",
     "ANTHROPIC_MODEL": "claude-opus-4-5-thinking",
     "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-4-5-thinking",
     "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-4-5-thinking",
@@ -189,7 +140,7 @@ Or to use Gemini models:
 {
   "env": {
     "ANTHROPIC_AUTH_TOKEN": "test",
-    "ANTHROPIC_BASE_URL": "http://localhost:8080",
+    "ANTHROPIC_BASE_URL": "http://localhost:8386",
     "ANTHROPIC_MODEL": "gemini-3-pro-high[1m]",
     "ANTHROPIC_DEFAULT_OPUS_MODEL": "gemini-3-pro-high[1m]",
     "ANTHROPIC_DEFAULT_SONNET_MODEL": "gemini-3-flash[1m]",
@@ -207,7 +158,7 @@ Add the proxy settings to your shell profile:
 **macOS / Linux:**
 
 ```bash
-echo 'export ANTHROPIC_BASE_URL="http://localhost:8080"' >> ~/.zshrc
+echo 'export ANTHROPIC_BASE_URL="http://localhost:8386"' >> ~/.zshrc
 echo 'export ANTHROPIC_AUTH_TOKEN="test"' >> ~/.zshrc
 source ~/.zshrc
 ```
@@ -217,7 +168,7 @@ source ~/.zshrc
 **Windows (PowerShell):**
 
 ```powershell
-Add-Content $PROFILE "`n`$env:ANTHROPIC_BASE_URL = 'http://localhost:8080'"
+Add-Content $PROFILE "`n`$env:ANTHROPIC_BASE_URL = 'http://localhost:8386'"
 Add-Content $PROFILE "`$env:ANTHROPIC_AUTH_TOKEN = 'test'"
 . $PROFILE
 ```
@@ -225,7 +176,7 @@ Add-Content $PROFILE "`$env:ANTHROPIC_AUTH_TOKEN = 'test'"
 **Windows (Command Prompt):**
 
 ```cmd
-setx ANTHROPIC_BASE_URL "http://localhost:8080"
+setx ANTHROPIC_BASE_URL "http://localhost:8386"
 setx ANTHROPIC_AUTH_TOKEN "test"
 ```
 
@@ -235,7 +186,7 @@ Restart your terminal for changes to take effect.
 
 ```bash
 # Make sure the proxy is running first
-antigravity-claude-proxy start
+npm start
 
 # In another terminal, run Claude Code
 claude
@@ -263,7 +214,7 @@ To run both the official Claude Code and Antigravity version simultaneously, add
 
 ```bash
 # Add to ~/.zshrc or ~/.bashrc
-alias claude-antigravity='CLAUDE_CONFIG_DIR=~/.claude-account-antigravity ANTHROPIC_BASE_URL="http://localhost:8080" ANTHROPIC_AUTH_TOKEN="test" command claude'
+alias claude-antigravity='CLAUDE_CONFIG_DIR=~/.claude-account-antigravity ANTHROPIC_BASE_URL="http://localhost:8386" ANTHROPIC_AUTH_TOKEN="test" command claude'
 ```
 
 **Windows (PowerShell):**
@@ -272,7 +223,7 @@ alias claude-antigravity='CLAUDE_CONFIG_DIR=~/.claude-account-antigravity ANTHRO
 # Add to $PROFILE
 function claude-antigravity {
     $env:CLAUDE_CONFIG_DIR = "$env:USERPROFILE\.claude-account-antigravity"
-    $env:ANTHROPIC_BASE_URL = "http://localhost:8080"
+    $env:ANTHROPIC_BASE_URL = "http://localhost:8386"
     $env:ANTHROPIC_AUTH_TOKEN = "test"
     claude
 }
@@ -286,7 +237,6 @@ Then run `claude` for official API or `claude-antigravity` for this proxy.
 
 - [Available Models](docs/models.md)
 - [Multi-Account Load Balancing](docs/load-balancing.md)
-- [Web Management Console](docs/web-console.md)
 - [Advanced Configuration](docs/configuration.md)
 - [macOS Menu Bar App](docs/menubar-app.md)
 - [OpenClaw / ClawdBot Integration](docs/openclaw.md)

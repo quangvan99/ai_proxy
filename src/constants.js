@@ -3,28 +3,10 @@
  * Based on: https://github.com/NoeFabris/opencode-antigravity-auth
  */
 
-import { homedir, platform, arch } from 'os';
+import { platform, arch } from 'os';
 import { join } from 'path';
 import { config } from './config.js';
-
-/**
- * Get the Antigravity database path based on the current platform.
- * - macOS: ~/Library/Application Support/Antigravity/...
- * - Windows: ~/AppData/Roaming/Antigravity/...
- * - Linux/other: ~/.config/Antigravity/...
- * @returns {string} Full path to the Antigravity state database
- */
-function getAntigravityDbPath() {
-    const home = homedir();
-    switch (platform()) {
-        case 'darwin':
-            return join(home, 'Library/Application Support/Antigravity/User/globalStorage/state.vscdb');
-        case 'win32':
-            return join(home, 'AppData/Roaming/Antigravity/User/globalStorage/state.vscdb');
-        default: // linux, freebsd, etc.
-            return join(home, '.config/Antigravity/User/globalStorage/state.vscdb');
-    }
-}
+import { cwd } from 'process';
 
 /**
  * Generate platform-specific User-Agent string.
@@ -119,23 +101,19 @@ export const DEFAULT_PROJECT_ID = 'rising-fact-p41fc';
 export const TOKEN_REFRESH_INTERVAL_MS = config?.tokenCacheTtlMs || (5 * 60 * 1000); // From config or 5 minutes
 export const REQUEST_BODY_LIMIT = config?.requestBodyLimit || '50mb';
 export const ANTIGRAVITY_AUTH_PORT = 9092;
-export const DEFAULT_PORT = config?.port || 8080;
+export const DEFAULT_PORT = config?.port || 8386;
 
 // Multi-account configuration
 export const ACCOUNT_CONFIG_PATH = config?.accountConfigPath || join(
-    homedir(),
-    '.config/antigravity-proxy/accounts.json'
+    cwd(),
+    'accounts.json'
 );
 
 // Usage history persistence path
 export const USAGE_HISTORY_PATH = join(
-    homedir(),
-    '.config/antigravity-proxy/usage-history.json'
+    cwd(),
+    'usage-history.json'
 );
-
-// Antigravity app database path (for legacy single-account token extraction)
-// Uses platform-specific path detection
-export const ANTIGRAVITY_DB_PATH = getAntigravityDbPath();
 
 export const DEFAULT_COOLDOWN_MS = config?.defaultCooldownMs || (10 * 1000); // From config or 10 seconds
 export const MAX_RETRIES = config?.maxRetries || 5; // From config or 5
@@ -180,16 +158,8 @@ export const CAPACITY_JITTER_MAX_MS = 10000; // ±5s jitter range
 // Thinking model constants
 export const MIN_SIGNATURE_LENGTH = 50; // Minimum valid thinking signature length
 
-// Account selection strategies
-export const SELECTION_STRATEGIES = ['sticky', 'round-robin', 'hybrid'];
+// Account selection strategy (only Hybrid is supported)
 export const DEFAULT_SELECTION_STRATEGY = 'hybrid';
-
-// Strategy display labels
-export const STRATEGY_LABELS = {
-    'sticky': 'Sticky (Cache Optimized)',
-    'round-robin': 'Round Robin (Load Balanced)',
-    'hybrid': 'Hybrid (Smart Distribution)'
-};
 
 // Gemini-specific limits
 export const GEMINI_MAX_OUTPUT_TOKENS = 16384;
@@ -265,15 +235,6 @@ export const OAUTH_REDIRECT_URI = `http://localhost:${OAUTH_CONFIG.callbackPort}
 // Reference: GitHub issue #76, CLIProxyAPI, gcli2api
 export const ANTIGRAVITY_SYSTEM_INSTRUCTION = `You are Antigravity, a powerful agentic AI coding assistant designed by the Google Deepmind team working on Advanced Agentic Coding.You are pair programming with a USER to solve their coding task. The task may require creating a new codebase, modifying or debugging an existing codebase, or simply answering a question.**Absolute paths only****Proactiveness**`;
 
-// Model fallback mapping - maps primary model to fallback when quota exhausted
-export const MODEL_FALLBACK_MAP = {
-    'gemini-3-pro-high': 'claude-opus-4-5-thinking',
-    'gemini-3-pro-low': 'claude-sonnet-4-5',
-    'gemini-3-flash': 'claude-sonnet-4-5-thinking',
-    'claude-opus-4-5-thinking': 'gemini-3-pro-high',
-    'claude-sonnet-4-5-thinking': 'gemini-3-flash',
-    'claude-sonnet-4-5': 'gemini-3-flash'
-};
 
 // Default test models for each family (used by test suite)
 export const TEST_MODELS = {
@@ -287,7 +248,7 @@ export const DEFAULT_PRESETS = [
         name: 'Claude Thinking',
         config: {
             ANTHROPIC_AUTH_TOKEN: 'test',
-            ANTHROPIC_BASE_URL: 'http://localhost:8080',
+            ANTHROPIC_BASE_URL: 'http://localhost:8386',
             ANTHROPIC_MODEL: 'claude-opus-4-5-thinking',
             ANTHROPIC_DEFAULT_OPUS_MODEL: 'claude-opus-4-5-thinking',
             ANTHROPIC_DEFAULT_SONNET_MODEL: 'claude-sonnet-4-5-thinking',
@@ -300,7 +261,7 @@ export const DEFAULT_PRESETS = [
         name: 'Gemini 1M',
         config: {
             ANTHROPIC_AUTH_TOKEN: 'test',
-            ANTHROPIC_BASE_URL: 'http://localhost:8080',
+            ANTHROPIC_BASE_URL: 'http://localhost:8386',
             ANTHROPIC_MODEL: 'gemini-3-pro-high[1m]',
             ANTHROPIC_DEFAULT_OPUS_MODEL: 'gemini-3-pro-high[1m]',
             ANTHROPIC_DEFAULT_SONNET_MODEL: 'gemini-3-flash[1m]',
@@ -431,7 +392,7 @@ export const DEFAULT_SERVER_PRESETS = [
             switchAccountDelayMs: 8000,
             capacityBackoffTiersMs: [8000, 15000, 30000, 45000, 90000],
             accountSelection: {
-                strategy: 'sticky',
+                strategy: 'hybrid',
                 healthScore: {
                     initial: 80,
                     successReward: 2,
@@ -478,7 +439,6 @@ export default {
     ANTIGRAVITY_AUTH_PORT,
     DEFAULT_PORT,
     ACCOUNT_CONFIG_PATH,
-    ANTIGRAVITY_DB_PATH,
     DEFAULT_COOLDOWN_MS,
     MAX_RETRIES,
     MAX_EMPTY_RESPONSE_RETRIES,
@@ -505,8 +465,6 @@ export default {
     isThinkingModel,
     OAUTH_CONFIG,
     OAUTH_REDIRECT_URI,
-    STRATEGY_LABELS,
-    MODEL_FALLBACK_MAP,
     TEST_MODELS,
     DEFAULT_PRESETS,
     DEFAULT_SERVER_PRESETS,

@@ -23,7 +23,6 @@ import { logger } from '../utils/logger.js';
 import { parseResetTime } from './rate-limit-parser.js';
 import { buildCloudCodeRequest, buildHeaders } from './request-builder.js';
 import { streamSSEResponse } from './sse-streamer.js';
-import { getFallbackModel } from '../fallback-config.js';
 import {
     getRateLimitBackoff,
     clearRateLimitState,
@@ -46,7 +45,7 @@ import crypto from 'crypto';
  * @yields {Object} Anthropic-format SSE events (message_start, content_block_start, content_block_delta, etc.)
  * @throws {Error} If max retries exceeded or no accounts available
  */
-export async function* sendMessageStream(anthropicRequest, accountManager, fallbackEnabled = false) {
+export async function* sendMessageStream(anthropicRequest, accountManager) {
     const model = anthropicRequest.model;
 
     // Retry loop with account failover
@@ -66,18 +65,8 @@ export async function* sendMessageStream(anthropicRequest, accountManager, fallb
                 const minWaitMs = accountManager.getMinWaitTimeMs(model);
                 const resetTime = new Date(Date.now() + minWaitMs).toISOString();
 
-                // If wait time is too long (> 2 minutes), try fallback first, then throw error
+                // If wait time is too long (> 2 minutes), throw error
                 if (minWaitMs > MAX_WAIT_BEFORE_ERROR_MS) {
-                    // Check if fallback is enabled and available
-                    if (fallbackEnabled) {
-                        const fallbackModel = getFallbackModel(model);
-                        if (fallbackModel) {
-                            logger.warn(`[CloudCode] All accounts exhausted for ${model} (${formatDuration(minWaitMs)} wait). Attempting fallback to ${fallbackModel} (streaming)`);
-                            const fallbackRequest = { ...anthropicRequest, model: fallbackModel };
-                            yield* sendMessageStream(fallbackRequest, accountManager, false);
-                            return;
-                        }
-                    }
                     throw new Error(
                         `RESOURCE_EXHAUSTED: Rate limited on ${model}. Quota will reset after ${formatDuration(minWaitMs)}. Next available: ${resetTime}`
                     );
@@ -441,17 +430,6 @@ export async function* sendMessageStream(anthropicRequest, accountManager, fallb
             }
 
             throw error;
-        }
-    }
-
-    // All retries exhausted - try fallback model if enabled
-    if (fallbackEnabled) {
-        const fallbackModel = getFallbackModel(model);
-        if (fallbackModel) {
-            logger.warn(`[CloudCode] All retries exhausted for ${model}. Attempting fallback to ${fallbackModel} (streaming)`);
-            const fallbackRequest = { ...anthropicRequest, model: fallbackModel };
-            yield* sendMessageStream(fallbackRequest, accountManager, false);
-            return;
         }
     }
 

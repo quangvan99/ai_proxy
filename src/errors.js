@@ -119,23 +119,6 @@ export class ApiError extends AntigravityError {
 }
 
 /**
- * Native module error (version mismatch, rebuild required)
- */
-export class NativeModuleError extends AntigravityError {
-    /**
-     * @param {string} message - Error message
-     * @param {boolean} rebuildSucceeded - Whether auto-rebuild succeeded
-     * @param {boolean} restartRequired - Whether server restart is needed
-     */
-    constructor(message, rebuildSucceeded = false, restartRequired = false) {
-        super(message, 'NATIVE_MODULE_ERROR', false, { rebuildSucceeded, restartRequired });
-        this.name = 'NativeModuleError';
-        this.rebuildSucceeded = rebuildSucceeded;
-        this.restartRequired = restartRequired;
-    }
-}
-
-/**
  * Empty response error - thrown when API returns no content
  * Used to trigger retry logic in streaming handler
  */
@@ -228,7 +211,6 @@ export default {
     NoAccountsError,
     MaxRetriesError,
     ApiError,
-    NativeModuleError,
     EmptyResponseError,
     CapacityExhaustedError,
     isRateLimitError,
