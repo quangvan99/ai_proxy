@@ -115,6 +115,12 @@ export const CODEX_ACCOUNT_CONFIG_PATH = config?.codexAccountConfigPath || join(
     'codex-accounts.json'
 );
 
+// Cursor account configuration (separate file)
+export const CURSOR_ACCOUNT_CONFIG_PATH = config?.cursorAccountConfigPath || join(
+    cwd(),
+    'cursor-accounts.json'
+);
+
 // Usage history persistence path
 export const USAGE_HISTORY_PATH = join(
     cwd(),
@@ -218,6 +224,28 @@ export const CODEX_MODELS = [
     'gpt-5-codex-mini'
 ];
 
+// Cursor (IDE) configuration
+export const CURSOR_BASE_URL = 'https://api2.cursor.sh';
+export const CURSOR_CHAT_PATH = '/aiserver.v1.ChatService/StreamUnifiedChatWithTools';
+export const CURSOR_HEADERS = {
+    'connect-accept-encoding': 'gzip',
+    'connect-protocol-version': '1',
+    'content-type': 'application/connect+proto',
+    'user-agent': 'connect-es/1.6.1'
+};
+
+// Cursor models list (from 9router)
+export const CURSOR_MODELS = [
+    'default',
+    'claude-4.5-opus-high-thinking',
+    'claude-4.5-opus-high',
+    'claude-4.5-sonnet-thinking',
+    'claude-4.5-sonnet',
+    'claude-4.5-haiku',
+    'claude-4.5-opus',
+    'gpt-5.2-codex'
+];
+
 /**
  * Get the model family from model name (dynamic detection, no hardcoded list).
  * @param {string} modelName - The model name from the request
@@ -225,6 +253,7 @@ export const CODEX_MODELS = [
  */
 export function getModelFamily(modelName) {
     const lower = (modelName || '').toLowerCase();
+    if (lower.startsWith('cu/') || lower.startsWith('cursor/')) return 'cursor';
     if (lower.includes('claude')) return 'claude';
     if (lower.includes('gemini')) return 'gemini';
     if (lower.includes('codex') || lower.startsWith('gpt-5')) return 'codex';
@@ -483,6 +512,8 @@ export default {
     ANTIGRAVITY_AUTH_PORT,
     DEFAULT_PORT,
     ACCOUNT_CONFIG_PATH,
+    CODEX_ACCOUNT_CONFIG_PATH,
+    CURSOR_ACCOUNT_CONFIG_PATH,
     DEFAULT_COOLDOWN_MS,
     MAX_RETRIES,
     MAX_EMPTY_RESPONSE_RETRIES,
@@ -505,6 +536,13 @@ export default {
     GEMINI_SKIP_SIGNATURE,
     GEMINI_SIGNATURE_CACHE_TTL_MS,
     MODEL_VALIDATION_CACHE_TTL_MS,
+    CODEX_BASE_URL,
+    CODEX_HEADERS,
+    CODEX_MODELS,
+    CURSOR_BASE_URL,
+    CURSOR_CHAT_PATH,
+    CURSOR_HEADERS,
+    CURSOR_MODELS,
     getModelFamily,
     isThinkingModel,
     OAUTH_CONFIG,

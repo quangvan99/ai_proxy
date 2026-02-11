@@ -8,12 +8,13 @@ import express from 'express';
 import cors from 'cors';
 import { sendMessage, sendMessageStream, listModels, getModelQuotas, getSubscriptionTier, isValidModel } from './cloudcode/index.js';
 import { config } from './config.js';
-import { REQUEST_BODY_LIMIT, CODEX_MODELS, getModelFamily } from './constants.js';
+import { REQUEST_BODY_LIMIT, CODEX_MODELS, CURSOR_MODELS, getModelFamily } from './constants.js';
 import { AccountManager } from './account-manager/index.js';
 import { clearThinkingSignatureCache } from './format/signature-cache.js';
 import { formatDuration } from './utils/helpers.js';
 import { logger } from './utils/logger.js';
 import { CodexAccountManager, sendCodexMessage, sendCodexMessageStream, listCodexModels, isValidCodexModel } from './codex/index.js';
+import { CursorAccountManager, sendCursorMessage, sendCursorMessageStream, listCursorModels, isValidCursorModel } from './cursor/index.js';
 
 const app = express();
 
@@ -23,12 +24,15 @@ app.disable('x-powered-by');
 // Initialize account manager (will be fully initialized on first request or startup)
 export const accountManager = new AccountManager();
 export const codexAccountManager = new CodexAccountManager();
+export const cursorAccountManager = new CursorAccountManager();
 
 // Track initialization status
 let isInitialized = false;
 let initPromise = null;
 let codexInitialized = false;
 let codexInitPromise = null;
+let cursorInitialized = false;
+let cursorInitPromise = null;
 
 /**
  * Ensure account manager is initialized (with race condition protection)
@@ -68,6 +72,21 @@ async function ensureCodexInitialized() {
     })();
 
     return codexInitPromise;
+}
+
+/**
+ * Ensure Cursor account manager is initialized
+ */
+async function ensureCursorInitialized() {
+    if (cursorInitialized) return;
+    if (cursorInitPromise) return cursorInitPromise;
+
+    cursorInitPromise = (async () => {
+        await cursorAccountManager.initialize();
+        cursorInitialized = true;
+    })();
+
+    return cursorInitPromise;
 }
 
 // Middleware
@@ -638,6 +657,8 @@ app.get('/v1/models', async (req, res) => {
 
         // Append Codex models (static list)
         combined.data.push(...listCodexModels(CODEX_MODELS).data);
+        // Append Cursor models (prefixed)
+        combined.data.push(...listCursorModels(CURSOR_MODELS, 'cu').data);
         res.json(combined);
     } catch (error) {
         logger.error('[API] Error listing models:', error);
@@ -702,7 +723,12 @@ app.post('/v1/messages', async (req, res) => {
         const modelId = requestedModel;
         const modelFamily = getModelFamily(modelId);
 
-        if (modelFamily !== 'codex') {
+        if (modelFamily === 'cursor') {
+            await ensureCursorInitialized();
+            if (!isValidCursorModel(modelId, CURSOR_MODELS)) {
+                throw new Error(`invalid_request_error: Invalid model: ${modelId}. Use /v1/models to see available models.`);
+            }
+        } else if (modelFamily !== 'codex') {
             // Ensure account manager is initialized
             await ensureInitialized();
 
@@ -726,7 +752,7 @@ app.post('/v1/messages', async (req, res) => {
 
         // Optimistic Retry: If ALL accounts are rate-limited for this model, reset them to force a fresh check.
         // If we have some available accounts, we try them first.
-        if (modelFamily !== 'codex' && accountManager.isAllRateLimited(modelId)) {
+        if (modelFamily !== 'codex' && modelFamily !== 'cursor' && accountManager.isAllRateLimited(modelId)) {
             logger.warn(`[Server] All accounts rate-limited for ${modelId}. Resetting state for optimistic retry.`);
             accountManager.resetAllRateLimits();
         }
@@ -784,7 +810,9 @@ app.post('/v1/messages', async (req, res) => {
                 // Initialize the generator
                 const generator = modelFamily === 'codex'
                     ? sendCodexMessageStream(request, codexAccountManager)
-                    : sendMessageStream(request, accountManager);
+                    : modelFamily === 'cursor'
+                        ? sendCursorMessageStream(request, cursorAccountManager)
+                        : sendMessageStream(request, accountManager);
                 
                 // BUFFERING STRATEGY:
                 // Pull the first event *before* sending headers. 
@@ -844,7 +872,9 @@ app.post('/v1/messages', async (req, res) => {
             // Handle non-streaming response
             const response = modelFamily === 'codex'
                 ? await sendCodexMessage(request, codexAccountManager)
-                : await sendMessage(request, accountManager);
+                : modelFamily === 'cursor'
+                    ? await sendCursorMessage(request, cursorAccountManager)
+                    : await sendMessage(request, accountManager);
             res.json(response);
         }
 

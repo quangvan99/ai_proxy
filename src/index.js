@@ -108,6 +108,12 @@ ${border}    ${align4(`export ANTHROPIC_API_KEY=${config.apiKey || 'dummy'}`)}${
 ║  Add Google accounts:                                        ║
 ║    npm run accounts                                          ║
 ║                                                              ║
+║  Add Codex accounts:                                         ║
+║    npm run codex:accounts                                    ║
+║                                                              ║
+║  Add Cursor accounts:                                        ║
+║    npm run cursor:accounts                                   ║
+║                                                              ║
 ${environmentSection}
 ╚══════════════════════════════════════════════════════════════╝
   `);

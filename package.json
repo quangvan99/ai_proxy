@@ -16,7 +16,12 @@
     "codex:accounts:add": "node src/cli/codex-accounts.js add",
     "codex:accounts:list": "node src/cli/codex-accounts.js list",
     "codex:accounts:remove": "node src/cli/codex-accounts.js remove",
-    "codex:accounts:clear": "node src/cli/codex-accounts.js clear"
+    "codex:accounts:clear": "node src/cli/codex-accounts.js clear",
+    "cursor:accounts": "node src/cli/cursor-accounts.js",
+    "cursor:accounts:add": "node src/cli/cursor-accounts.js add",
+    "cursor:accounts:list": "node src/cli/cursor-accounts.js list",
+    "cursor:accounts:remove": "node src/cli/cursor-accounts.js remove",
+    "cursor:accounts:clear": "node src/cli/cursor-accounts.js clear"
   },
   "keywords": [
     "claude",
