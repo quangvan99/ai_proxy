@@ -114,6 +114,9 @@ ${border}    ${align4(`export ANTHROPIC_API_KEY=${config.apiKey || 'dummy'}`)}${
 ║  Add Cursor accounts:                                        ║
 ║    npm run cursor:accounts                                   ║
 ║                                                              ║
+║  Add GitHub Copilot accounts:                                ║
+║    npm run github:accounts                                   ║
+║                                                              ║
 ${environmentSection}
 ╚══════════════════════════════════════════════════════════════╝
   `);

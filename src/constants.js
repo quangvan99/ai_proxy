@@ -121,6 +121,12 @@ export const CURSOR_ACCOUNT_CONFIG_PATH = config?.cursorAccountConfigPath || joi
     'cursor-accounts.json'
 );
 
+// GitHub Copilot account configuration (separate file)
+export const GITHUB_ACCOUNT_CONFIG_PATH = config?.githubAccountConfigPath || join(
+    cwd(),
+    'github-accounts.json'
+);
+
 // Usage history persistence path
 export const USAGE_HISTORY_PATH = join(
     cwd(),
@@ -246,6 +252,45 @@ export const CURSOR_MODELS = [
     'gpt-5.2-codex'
 ];
 
+// GitHub Copilot configuration
+export const GITHUB_COPILOT_BASE_URL = 'https://api.githubcopilot.com/chat/completions';
+export const GITHUB_COPILOT_TOKEN_URL = 'https://api.github.com/copilot_internal/v2/token';
+export const GITHUB_COPILOT_HEADERS = {
+    'copilot-integration-id': 'vscode-chat',
+    'editor-version': 'vscode/1.107.1',
+    'editor-plugin-version': 'copilot-chat/0.26.7',
+    'user-agent': 'GitHubCopilotChat/0.26.7',
+    'openai-intent': 'conversation-panel',
+    'x-github-api-version': '2025-04-01',
+    'x-vscode-user-agent-library-version': 'electron-fetch',
+    'X-Initiator': 'user',
+    'Content-Type': 'application/json'
+};
+
+// GitHub Copilot models list (from 9router)
+export const GITHUB_COPILOT_MODELS = [
+    'gpt-4.1',
+    'gpt-5',
+    'gpt-5-mini',
+    'gpt-5-codex',
+    'gpt-5.1',
+    'gpt-5.1-codex',
+    'gpt-5.1-codex-mini',
+    'gpt-5.1-codex-max',
+    'gpt-5.2',
+    'gpt-5.2-codex',
+    'claude-haiku-4.5',
+    'claude-opus-4.1',
+    'claude-opus-4-5-20251101',
+    'claude-sonnet-4',
+    'claude-sonnet-4.5',
+    'gemini-2.5-pro',
+    'gemini-3-flash',
+    'gemini-3-pro',
+    'grok-code-fast-1',
+    'raptor-mini'
+];
+
 /**
  * Get the model family from model name (dynamic detection, no hardcoded list).
  * @param {string} modelName - The model name from the request
@@ -254,6 +299,7 @@ export const CURSOR_MODELS = [
 export function getModelFamily(modelName) {
     const lower = (modelName || '').toLowerCase();
     if (lower.startsWith('cu/') || lower.startsWith('cursor/')) return 'cursor';
+    if (lower.startsWith('gh/') || lower.startsWith('github/')) return 'github';
     if (lower.includes('claude')) return 'claude';
     if (lower.includes('gemini')) return 'gemini';
     if (lower.includes('codex') || lower.startsWith('gpt-5')) return 'codex';
@@ -286,8 +332,8 @@ const OAUTH_CALLBACK_PORT = parseInt(process.env.OAUTH_CALLBACK_PORT || '51121',
 const OAUTH_CALLBACK_FALLBACK_PORTS = [51122, 51123, 51124, 51125, 51126];
 
 export const OAUTH_CONFIG = {
-    clientId: '1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com',
-    clientSecret: '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',
+    clientId: process.env.GOOGLE_OAUTH_CLIENT_ID || '',
+    clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET || '',
     authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
     tokenUrl: 'https://oauth2.googleapis.com/token',
     userInfoUrl: 'https://www.googleapis.com/oauth2/v1/userinfo',
@@ -514,6 +560,7 @@ export default {
     ACCOUNT_CONFIG_PATH,
     CODEX_ACCOUNT_CONFIG_PATH,
     CURSOR_ACCOUNT_CONFIG_PATH,
+    GITHUB_ACCOUNT_CONFIG_PATH,
     DEFAULT_COOLDOWN_MS,
     MAX_RETRIES,
     MAX_EMPTY_RESPONSE_RETRIES,
@@ -543,6 +590,10 @@ export default {
     CURSOR_CHAT_PATH,
     CURSOR_HEADERS,
     CURSOR_MODELS,
+    GITHUB_COPILOT_BASE_URL,
+    GITHUB_COPILOT_TOKEN_URL,
+    GITHUB_COPILOT_HEADERS,
+    GITHUB_COPILOT_MODELS,
     getModelFamily,
     isThinkingModel,
     OAUTH_CONFIG,

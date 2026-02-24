@@ -8,13 +8,14 @@ import express from 'express';
 import cors from 'cors';
 import { sendMessage, sendMessageStream, listModels, getModelQuotas, getSubscriptionTier, isValidModel } from './cloudcode/index.js';
 import { config } from './config.js';
-import { REQUEST_BODY_LIMIT, CODEX_MODELS, CURSOR_MODELS, getModelFamily } from './constants.js';
+import { REQUEST_BODY_LIMIT, CODEX_MODELS, CURSOR_MODELS, GITHUB_COPILOT_MODELS, getModelFamily } from './constants.js';
 import { AccountManager } from './account-manager/index.js';
 import { clearThinkingSignatureCache } from './format/signature-cache.js';
 import { formatDuration } from './utils/helpers.js';
 import { logger } from './utils/logger.js';
 import { CodexAccountManager, sendCodexMessage, sendCodexMessageStream, listCodexModels, isValidCodexModel } from './codex/index.js';
 import { CursorAccountManager, sendCursorMessage, sendCursorMessageStream, listCursorModels, isValidCursorModel } from './cursor/index.js';
+import { GithubAccountManager, sendGithubMessage, sendGithubMessageStream, listGithubModels, isValidGithubModel } from './github/index.js';
 
 const app = express();
 
@@ -25,6 +26,7 @@ app.disable('x-powered-by');
 export const accountManager = new AccountManager();
 export const codexAccountManager = new CodexAccountManager();
 export const cursorAccountManager = new CursorAccountManager();
+export const githubAccountManager = new GithubAccountManager();
 
 // Track initialization status
 let isInitialized = false;
@@ -33,6 +35,8 @@ let codexInitialized = false;
 let codexInitPromise = null;
 let cursorInitialized = false;
 let cursorInitPromise = null;
+let githubInitialized = false;
+let githubInitPromise = null;
 
 /**
  * Ensure account manager is initialized (with race condition protection)
@@ -87,6 +91,21 @@ async function ensureCursorInitialized() {
     })();
 
     return cursorInitPromise;
+}
+
+/**
+ * Ensure GitHub Copilot account manager is initialized
+ */
+async function ensureGithubInitialized() {
+    if (githubInitialized) return;
+    if (githubInitPromise) return githubInitPromise;
+
+    githubInitPromise = (async () => {
+        await githubAccountManager.initialize();
+        githubInitialized = true;
+    })();
+
+    return githubInitPromise;
 }
 
 // Middleware
@@ -189,6 +208,13 @@ function parseError(error) {
 // Request logging middleware
 app.use((req, res, next) => {
     const start = Date.now();
+
+    // Temp: log all non-messages requests to debug web_search routing
+    if (req.originalUrl !== '/v1/messages' && req.originalUrl !== '/health') {
+        import('fs').then(({ appendFileSync }) => {
+            appendFileSync('/tmp/codex_server.log', JSON.stringify({ type: 'REQUEST', method: req.method, url: req.originalUrl }) + '\n');
+        });
+    }
 
     // Log response on finish
     res.on('finish', () => {
@@ -659,6 +685,8 @@ app.get('/v1/models', async (req, res) => {
         combined.data.push(...listCodexModels(CODEX_MODELS).data);
         // Append Cursor models (prefixed)
         combined.data.push(...listCursorModels(CURSOR_MODELS, 'cu').data);
+        // Append GitHub Copilot models (prefixed)
+        combined.data.push(...listGithubModels(GITHUB_COPILOT_MODELS, 'gh').data);
         res.json(combined);
     } catch (error) {
         logger.error('[API] Error listing models:', error);
@@ -723,7 +751,12 @@ app.post('/v1/messages', async (req, res) => {
         const modelId = requestedModel;
         const modelFamily = getModelFamily(modelId);
 
-        if (modelFamily === 'cursor') {
+        if (modelFamily === 'github') {
+            await ensureGithubInitialized();
+            if (!isValidGithubModel(modelId, GITHUB_COPILOT_MODELS)) {
+                throw new Error(`invalid_request_error: Invalid model: ${modelId}. Use /v1/models to see available models.`);
+            }
+        } else if (modelFamily === 'cursor') {
             await ensureCursorInitialized();
             if (!isValidCursorModel(modelId, CURSOR_MODELS)) {
                 throw new Error(`invalid_request_error: Invalid model: ${modelId}. Use /v1/models to see available models.`);
@@ -752,7 +785,7 @@ app.post('/v1/messages', async (req, res) => {
 
         // Optimistic Retry: If ALL accounts are rate-limited for this model, reset them to force a fresh check.
         // If we have some available accounts, we try them first.
-        if (modelFamily !== 'codex' && modelFamily !== 'cursor' && accountManager.isAllRateLimited(modelId)) {
+        if (modelFamily !== 'codex' && modelFamily !== 'cursor' && modelFamily !== 'github' && accountManager.isAllRateLimited(modelId)) {
             logger.warn(`[Server] All accounts rate-limited for ${modelId}. Resetting state for optimistic retry.`);
             accountManager.resetAllRateLimits();
         }
@@ -790,6 +823,27 @@ app.post('/v1/messages', async (req, res) => {
 
         logger.info(`[API] Request for model: ${request.model}, stream: ${!!stream}`);
 
+        // Temporary: log full request tools + messages for debugging web search
+        {
+            const { appendFileSync } = await import('fs');
+            const toolNames = (tools || []).map(t => t.name || t.type);
+            const msgSummary = (messages || []).map((m, i) => {
+                if (!Array.isArray(m.content)) return `[${i}]${m.role}:text`;
+                const blocks = m.content.map(b => {
+                    if (b.type === 'tool_result') return `tool_result(id=${b.tool_use_id},content=${JSON.stringify(b.content||'').substring(0,500)})`;
+                    return b.type;
+                });
+                return `[${i}]${m.role}:${blocks.join(',')}`;
+            });
+            // Log interesting headers
+            const hdrs = {};
+            for (const h of ['anthropic-beta', 'x-api-key', 'authorization']) {
+                if (req.headers[h]) hdrs[h] = req.headers[h].substring(0, 30);
+            }
+            // Log url too
+            appendFileSync('/tmp/codex_server.log', JSON.stringify({ url: req.url, model, tools: toolNames, msgs: msgSummary, headers: hdrs }) + '\n');
+        }
+
         // Debug: Log message structure to diagnose tool_use/tool_result ordering
         if (logger.isDebugEnabled) {
             logger.debug('[API] Message structure:');
@@ -812,7 +866,9 @@ app.post('/v1/messages', async (req, res) => {
                     ? sendCodexMessageStream(request, codexAccountManager)
                     : modelFamily === 'cursor'
                         ? sendCursorMessageStream(request, cursorAccountManager)
-                        : sendMessageStream(request, accountManager);
+                        : modelFamily === 'github'
+                            ? sendGithubMessageStream(request, githubAccountManager)
+                            : sendMessageStream(request, accountManager);
                 
                 // BUFFERING STRATEGY:
                 // Pull the first event *before* sending headers. 
@@ -874,7 +930,9 @@ app.post('/v1/messages', async (req, res) => {
                 ? await sendCodexMessage(request, codexAccountManager)
                 : modelFamily === 'cursor'
                     ? await sendCursorMessage(request, cursorAccountManager)
-                    : await sendMessage(request, accountManager);
+                    : modelFamily === 'github'
+                        ? await sendGithubMessage(request, githubAccountManager)
+                        : await sendMessage(request, accountManager);
             res.json(response);
         }
 

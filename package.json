@@ -21,7 +21,12 @@
     "cursor:accounts:add": "node src/cli/cursor-accounts.js add",
     "cursor:accounts:list": "node src/cli/cursor-accounts.js list",
     "cursor:accounts:remove": "node src/cli/cursor-accounts.js remove",
-    "cursor:accounts:clear": "node src/cli/cursor-accounts.js clear"
+    "cursor:accounts:clear": "node src/cli/cursor-accounts.js clear",
+    "github:accounts": "node src/cli/github-accounts.js",
+    "github:accounts:add": "node src/cli/github-accounts.js add",
+    "github:accounts:list": "node src/cli/github-accounts.js list",
+    "github:accounts:remove": "node src/cli/github-accounts.js remove",
+    "github:accounts:clear": "node src/cli/github-accounts.js clear"
   },
   "keywords": [
     "claude",
