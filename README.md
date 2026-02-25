@@ -232,6 +232,69 @@ This project is based on insights and code from:
 
 ---
 
+## So sánh 3 repo cho nhu cầu Claude Code
+
+Ngày cập nhật: 2026-02-25
+
+Tiêu chí theo yêu cầu:
+1. Dễ sử dụng
+2. Tích hợp sẵn cho Claude Code
+3. Có nhiều mô hình code phù hợp
+
+### So sánh nhanh
+
+| Tiêu chí | antigravity-claude-proxy | 9router | ai_proxy |
+|---|---|---|---|
+| Dễ sử dụng | Dễ (CLI + WebUI riêng) | Rất dễ (dashboard đầy đủ, quản lý qua UI) | Trung bình (CLI là chính, nhẹ) |
+| Tích hợp sẵn Claude Code | Tốt (endpoint Anthropic trực tiếp, xử lý request phụ của Claude CLI) | Khá (hỗ trợ Claude qua lớp translator + API chỉnh settings Claude) | Tốt (giữ luồng Anthropic cho Claude Code, xử lý request phụ của Claude CLI) |
+| Đa mô hình code | Trung bình (chủ yếu Claude/Gemini) | Rộng nhất (nhiều provider + combo/fallback) | Khá rộng (Claude/Gemini + Codex + Cursor + GitHub) |
+| Phù hợp khi cần "Claude Code native" | Cao | Trung bình | Cao |
+
+### Điểm mạnh/yếu từng repo
+
+#### antigravity-claude-proxy
+Ưu điểm:
+- Tập trung cho Claude Code, API gọn, hành vi sát Claude workflow.
+- Có xử lý các request phụ của Claude CLI (`/api/event_logging/batch`, `POST /`).
+- Có WebUI để quản lý account và cấu hình.
+
+Hạn chế:
+- Độ phủ model không rộng bằng 9router/ai_proxy.
+- `/v1/messages/count_tokens` hiện trả `501` (chưa triển khai).
+
+#### 9router
+Ưu điểm:
+- Dễ dùng nhất theo góc nhìn vận hành: dashboard, provider management, combo/fallback.
+- Đa mô hình mạnh nhất (phù hợp khi muốn route nhiều nhà cung cấp).
+- Có API hỗ trợ chỉnh `~/.claude/settings.json`.
+
+Hạn chế:
+- Luồng Claude đi qua lớp translate tổng quát (không "native-focused" bằng antigravity/ai_proxy).
+- `count_tokens` là ước lượng.
+- Có logic bypass cho một số pattern `claude-cli` (thực dụng cho ổn định, nhưng không thuần upstream behavior).
+
+#### ai_proxy
+Ưu điểm:
+- Kế thừa lõi Claude-compatible từ antigravity (phù hợp Claude Code).
+- Mở rộng thêm model family cho coding: Codex, Cursor, GitHub Copilot.
+- Một cổng `/v1/messages` nhưng route theo family model.
+
+Hạn chế:
+- Ít test hơn antigravity và không có dashboard mạnh như 9router.
+- `/v1/messages/count_tokens` hiện trả `501`.
+
+### Kết luận theo yêu cầu
+
+Với điều kiện nhấn mạnh: **"phải tích hợp sẵn cho Claude Code"** và đồng thời cần **nhiều mô hình code**:
+
+- Lựa chọn phù hợp nhất: **`ai_proxy`**
+  - Giữ tích hợp Claude Code theo kiểu native-compatible.
+  - Có thêm Codex/Cursor/GitHub để mở rộng mô hình coding.
+
+Nếu ưu tiên #1 là giao diện quản trị và đa provider cực rộng, có thể chọn `9router`, nhưng mức "native-focused cho Claude Code" không đậm bằng `ai_proxy`.
+
+---
+
 ## License
 
 MIT
