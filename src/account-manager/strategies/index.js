@@ -24,16 +24,6 @@ export function createStrategy(strategyName, config = {}) {
 }
 
 /**
- * Check if a strategy name is valid
- * @param {string} name - Strategy name to check
- * @returns {boolean} True if 'hybrid' or empty (defaults to hybrid)
- */
-export function isValidStrategy(name) {
-    if (!name) return true; // Empty defaults to hybrid
-    return name.toLowerCase() === 'hybrid';
-}
-
-/**
  * Get the display label for the strategy
  * @param {string} name - Strategy name (ignored)
  * @returns {string} Display label
@@ -44,7 +34,6 @@ export function getStrategyLabel(name) {
 
 // Re-export strategy for direct use
 export { HybridStrategy } from './hybrid-strategy.js';
-export { BaseStrategy } from './base-strategy.js';
 
 // Re-export trackers
 export { HealthTracker, TokenBucketTracker, QuotaTracker } from './trackers/index.js';

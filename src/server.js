@@ -209,13 +209,6 @@ function parseError(error) {
 app.use((req, res, next) => {
     const start = Date.now();
 
-    // Temp: log all non-messages requests to debug web_search routing
-    if (req.originalUrl !== '/v1/messages' && req.originalUrl !== '/health') {
-        import('fs').then(({ appendFileSync }) => {
-            appendFileSync('/tmp/codex_server.log', JSON.stringify({ type: 'REQUEST', method: req.method, url: req.originalUrl }) + '\n');
-        });
-    }
-
     // Log response on finish
     res.on('finish', () => {
         const duration = Date.now() - start;
@@ -822,27 +815,6 @@ app.post('/v1/messages', async (req, res) => {
         };
 
         logger.info(`[API] Request for model: ${request.model}, stream: ${!!stream}`);
-
-        // Temporary: log full request tools + messages for debugging web search
-        {
-            const { appendFileSync } = await import('fs');
-            const toolNames = (tools || []).map(t => t.name || t.type);
-            const msgSummary = (messages || []).map((m, i) => {
-                if (!Array.isArray(m.content)) return `[${i}]${m.role}:text`;
-                const blocks = m.content.map(b => {
-                    if (b.type === 'tool_result') return `tool_result(id=${b.tool_use_id},content=${JSON.stringify(b.content||'').substring(0,500)})`;
-                    return b.type;
-                });
-                return `[${i}]${m.role}:${blocks.join(',')}`;
-            });
-            // Log interesting headers
-            const hdrs = {};
-            for (const h of ['anthropic-beta', 'x-api-key', 'authorization']) {
-                if (req.headers[h]) hdrs[h] = req.headers[h].substring(0, 30);
-            }
-            // Log url too
-            appendFileSync('/tmp/codex_server.log', JSON.stringify({ url: req.url, model, tools: toolNames, msgs: msgSummary, headers: hdrs }) + '\n');
-        }
 
         // Debug: Log message structure to diagnose tool_use/tool_result ordering
         if (logger.isDebugEnabled) {

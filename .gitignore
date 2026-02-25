@@ -39,3 +39,5 @@ github-accounts.json
 cursor-accounts.json
 *-accounts.json
 *accounts*.json
+.proxy.pid
+.proxy.log

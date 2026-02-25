@@ -6,14 +6,12 @@
 // Initialize proxy support BEFORE any other imports that may use fetch
 import './utils/proxy.js';
 
-import app, { accountManager } from './server.js';
+import app from './server.js';
 import { DEFAULT_PORT } from './constants.js';
 import { logger } from './utils/logger.js';
 import { config } from './config.js';
 import { getStrategyLabel } from './account-manager/strategies/index.js';
 import { getPackageVersion } from './utils/helpers.js';
-import path from 'path';
-import os from 'os';
 
 const packageVersion = getPackageVersion();
 
