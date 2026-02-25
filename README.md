@@ -3,26 +3,23 @@
 
 A proxy server that exposes an **Anthropic-compatible API** backed by **Antigravity's Cloud Code**, letting you use Claude and Gemini models with **Claude Code CLI** and **OpenClaw / ClawdBot**.
 
-## How It Works
+## Comparison of 3 repos for Claude Code usage
 
-```
-┌──────────────────┐     ┌─────────────────────┐     ┌────────────────────────────┐
-│   Claude Code    │────▶│  This Proxy Server  │────▶│  Antigravity Cloud Code    │
-│   (Anthropic     │     │  (Anthropic → Google│     │  (daily-cloudcode-pa.      │
-│    API format)   │     │   Generative AI)    │     │   sandbox.googleapis.com)  │
-└──────────────────┘     └─────────────────────┘     └────────────────────────────┘
-```
+Ngày cập nhật: 2026-02-25
 
-1. Receives requests in **Anthropic Messages API format**
-2. Uses OAuth tokens from added Google accounts
-3. Transforms to **Google Generative AI format** with Cloud Code wrapping
-4. Sends to Antigravity's Cloud Code API
-5. Converts responses back to **Anthropic format** with full thinking/streaming support
+Tiêu chí theo yêu cầu:
+1. Hỗ trợ các công cụ. 
+2. Tích hợp sẵn cho Claude Code.
+3. Có nhiều mô hình code. 
 
-## Prerequisites
+### So sánh nhanh
 
-- **Node.js** 18 or later
-- Google account(s) for authentication
+| Tiêu chí | antigravity-claude-proxy | 9router | ai_proxy |
+|---|---|---|---|
+| Tool hỗ trợ (web search, web fetch, bash) | Có | Không | Có |
+| Các mô hình hỗ trợ | Antigravity | All | All |
+| Tích hợp Claude code CLI format | Có | Không | Có |
+
 
 ---
 
@@ -207,50 +204,9 @@ Then run `claude` for official API or `claude-antigravity` for this proxy.
 
 ---
 
-## Documentation
-
-- [Available Models](docs/models.md)
-- [Multi-Account Load Balancing](docs/load-balancing.md)
-- [Advanced Configuration](docs/configuration.md)
-- [macOS Menu Bar App](docs/menubar-app.md)
-- [OpenClaw / ClawdBot Integration](docs/openclaw.md)
-- [API Endpoints](docs/api-endpoints.md)
-- [Testing](docs/testing.md)
-- [Troubleshooting](docs/troubleshooting.md)
-- [Safety, Usage, and Risk Notices](docs/safety-notices.md)
-- [Legal](docs/legal.md)
-- [Development](docs/development.md)
-
----
-
-## Credits
-
-This project is based on insights and code from:
-
-- [opencode-antigravity-auth](https://github.com/NoeFabris/opencode-antigravity-auth) - Antigravity OAuth plugin for OpenCode
-- [claude-code-proxy](https://github.com/1rgs/claude-code-proxy) - Anthropic API proxy using LiteLLM
-
----
-
-## So sánh 3 repo cho nhu cầu Claude Code
-
-Ngày cập nhật: 2026-02-25
-
-Tiêu chí theo yêu cầu:
-1. Dễ sử dụng
-2. Tích hợp sẵn cho Claude Code
-3. Có nhiều mô hình code phù hợp
-
-### So sánh nhanh
-
-| Tiêu chí | antigravity-claude-proxy | 9router | ai_proxy |
-|---|---|---|---|
-| Tool hỗ trợ (web search, web fetch, bash) | Có | Không | Có |
-| Các mô hình hỗ trợ | Antigravity | All | All |
-| Tích hợp Claude code CLI format | Có | Không | Có |
 
 
----
+
 
 ## License
 
