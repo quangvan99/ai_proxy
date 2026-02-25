@@ -56,34 +56,52 @@ export function convertAnthropicToCodexRequest(anthropicRequest) {
     };
 
     // System -> instructions
+    const CODEX_AGENT_PREFIX = `You are an autonomous coding agent running inside an agentic loop with full tool use enabled. Tools provided to you are REAL and will be executed — their results will be returned to you in subsequent turns. You MUST use tools to accomplish tasks; do not describe or simulate tool usage in text. When you need to read a file, call the tool. When you need to run a command, call the tool. When you need to search, call the tool. Never say "I would", "I will", "shall I proceed", "do you want me to", "should I", or ask any clarifying questions before acting. Never explain what you are about to do — just call the appropriate tool and do it. If multiple steps are needed, call one tool at a time and continue after receiving the result. Write complete, working code. If you encounter an error, fix it and continue autonomously.`;
+
     if (system) {
         if (typeof system === 'string') {
-            result.instructions = system;
+            result.instructions = CODEX_AGENT_PREFIX + '\n\n' + system;
         } else if (Array.isArray(system)) {
             const sysText = system
                 .filter(b => b && b.type === 'text')
                 .map(b => b.text)
                 .join('\n');
-            result.instructions = sysText;
+            result.instructions = CODEX_AGENT_PREFIX + '\n\n' + sysText;
         }
     }
 
     if (!result.instructions) {
-        result.instructions = '';
+        result.instructions = CODEX_AGENT_PREFIX;
     }
 
     for (const msg of messages) {
         const role = msg.role;
         const content = msg.content;
 
+        // Check if this message contains tool_use or tool_result blocks
+        const hasToolBlocks = Array.isArray(content) && content.some(
+            b => b && (b.type === 'tool_use' || b.type === 'tool_result')
+        );
+
         if (role === 'user' || role === 'assistant') {
+            // Only emit a text message if there are actual text parts
+            // (skip if the message is purely tool_use/tool_result)
             const parts = [];
-            const textParts = extractTextBlocks(content);
-            for (const text of textParts) {
-                if (!text) continue;
+            if (Array.isArray(content)) {
+                for (const block of content) {
+                    if (!block) continue;
+                    if (block.type === 'text' && block.text) {
+                        parts.push({
+                            type: role === 'user' ? 'input_text' : 'output_text',
+                            text: block.text
+                        });
+                    }
+                    // thinking blocks: skip (not supported by OpenAI Responses API)
+                }
+            } else if (typeof content === 'string' && content) {
                 parts.push({
                     type: role === 'user' ? 'input_text' : 'output_text',
-                    text
+                    text: content
                 });
             }
 
@@ -96,7 +114,9 @@ export function convertAnthropicToCodexRequest(anthropicRequest) {
             }
         }
 
-        if (Array.isArray(content)) {
+        // Emit tool_use as function_call and tool_result as function_call_output
+        // These are top-level items in the OpenAI Responses API input array
+        if (hasToolBlocks) {
             for (const block of content) {
                 if (!block) continue;
                 if (block.type === 'tool_use') {
@@ -139,8 +159,33 @@ export function convertAnthropicToCodexRequest(anthropicRequest) {
         }
     }
 
+    // Convert Anthropic tool_choice format to OpenAI Responses API format
     if (tool_choice) {
-        result.tool_choice = tool_choice;
+        if (typeof tool_choice === 'string') {
+            // Anthropic: "auto" | "any" | "none"
+            if (tool_choice === 'any') {
+                result.tool_choice = 'required';
+            } else if (tool_choice === 'auto') {
+                // For Codex: force "required" when tools present to ensure tool use
+                result.tool_choice = result.tools && result.tools.length > 0 ? 'required' : 'auto';
+            } else {
+                result.tool_choice = tool_choice; // "none"
+            }
+        } else if (tool_choice && typeof tool_choice === 'object') {
+            // Anthropic: { type: "tool", name: "tool_name" }
+            if (tool_choice.type === 'tool' && tool_choice.name) {
+                result.tool_choice = { type: 'function', name: tool_choice.name };
+            } else if (tool_choice.type === 'auto') {
+                result.tool_choice = result.tools && result.tools.length > 0 ? 'required' : 'auto';
+            } else if (tool_choice.type === 'any') {
+                result.tool_choice = 'required';
+            } else if (tool_choice.type === 'none') {
+                result.tool_choice = 'none';
+            }
+        }
+    } else if (result.tools && result.tools.length > 0) {
+        // Default to required when tools are present to force tool use
+        result.tool_choice = 'required';
     }
 
     return result;

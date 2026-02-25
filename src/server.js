@@ -825,6 +825,7 @@ app.post('/v1/messages', async (req, res) => {
                     : (typeof msg.content === 'string' ? 'text' : 'unknown');
                 logger.debug(`  [${i}] ${msg.role}: ${contentTypes}`);
             });
+            logger.debug(`[API] tools: ${tools?.length || 0}, tool_choice: ${JSON.stringify(tool_choice)}`);
         }
 
         if (stream) {

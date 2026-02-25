@@ -17,13 +17,33 @@ function buildHeaders(accessToken, stream) {
     return headers;
 }
 
-function parseRetryAfter(response) {
+function parseRetryAfter(response, bodyText) {
+    // Check retry-after header first
     const retryAfter = response.headers?.get?.('retry-after');
-    if (!retryAfter) return null;
-    const seconds = Number(retryAfter);
-    if (!Number.isNaN(seconds) && seconds > 0) {
-        return seconds * 1000;
+    if (retryAfter) {
+        const seconds = Number(retryAfter);
+        if (!Number.isNaN(seconds) && seconds > 0) {
+            return seconds * 1000;
+        }
     }
+
+    // Codex returns resets_in_seconds or resets_at in the JSON body
+    if (bodyText) {
+        try {
+            const body = JSON.parse(bodyText);
+            const err = body?.error || body;
+            if (err?.resets_in_seconds > 0) {
+                return err.resets_in_seconds * 1000;
+            }
+            if (err?.resets_at) {
+                const ms = new Date(err.resets_at * 1000).getTime() - Date.now();
+                if (ms > 0) return ms;
+            }
+        } catch {
+            // ignore parse error
+        }
+    }
+
     return null;
 }
 
@@ -41,6 +61,10 @@ export async function sendCodexMessage(anthropicRequest, codexAccountManager) {
         const { account, waitMs } = codexAccountManager.selectAccount();
 
         if (!account && waitMs > 0) {
+            if (waitMs > 60_000) {
+                const resetMins = Math.ceil(waitMs / 60_000);
+                throw new Error(`RESOURCE_EXHAUSTED: All Codex accounts have reached their usage limit. Quota resets in approximately ${resetMins} minutes.`);
+            }
             await sleep(waitMs + 500);
             attempt--;
             continue;
@@ -71,7 +95,7 @@ export async function sendCodexMessage(anthropicRequest, codexAccountManager) {
             }
 
             if (response.status === 429) {
-                const retryMs = parseRetryAfter(response) || DEFAULT_COOLDOWN_MS;
+                const retryMs = parseRetryAfter(response, errorText) || DEFAULT_COOLDOWN_MS;
                 codexAccountManager.markRateLimited(account.id, retryMs);
                 continue;
             }
@@ -92,12 +116,21 @@ export async function* sendCodexMessageStream(anthropicRequest, codexAccountMana
     const body = convertAnthropicToCodexRequest({ ...anthropicRequest, stream: true });
     body.stream = true;
 
+    // Debug: log exactly what we send to Codex
+    logger.debug('[Codex] Request body:\n' + JSON.stringify(body, null, 2));
+
     const maxAttempts = Math.max(3, codexAccountManager.getAccountCount() + 1);
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
         const { account, waitMs } = codexAccountManager.selectAccount();
 
         if (!account && waitMs > 0) {
+            // If all accounts are on cooldown for more than 60s, fail fast with a quota error
+            // so Claude Code CLI knows to stop rather than hanging
+            if (waitMs > 60_000) {
+                const resetMins = Math.ceil(waitMs / 60_000);
+                throw new Error(`RESOURCE_EXHAUSTED: All Codex accounts have reached their usage limit. Quota resets in approximately ${resetMins} minutes.`);
+            }
             await sleep(waitMs + 500);
             attempt--;
             continue;
@@ -125,7 +158,7 @@ export async function* sendCodexMessageStream(anthropicRequest, codexAccountMana
                 }
 
                 if (response.status === 429) {
-                    const retryMs = parseRetryAfter(response) || DEFAULT_COOLDOWN_MS;
+                    const retryMs = parseRetryAfter(response, errorText) || DEFAULT_COOLDOWN_MS;
                     codexAccountManager.markRateLimited(account.id, retryMs);
                     continue;
                 }

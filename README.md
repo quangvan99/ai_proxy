@@ -1,212 +1,273 @@
-# Antigravity Claude Proxy
+# AI Proxy
 
+A proxy server that exposes an **Anthropic-compatible API** (`/v1/messages`) backed by multiple AI providers, letting you use Claude Code CLI with free or alternative AI backends.
 
-A proxy server that exposes an **Anthropic-compatible API** backed by **Antigravity's Cloud Code**, letting you use Claude and Gemini models with **Claude Code CLI** and **OpenClaw / ClawdBot**.
+## Supported Providers
 
-## Comparison of 3 repos for Claude Code usage
+| Provider | Models | Account Setup |
+|---|---|---|
+| **Antigravity** (Google Cloud Code) | Claude (claude-sonnet-4-5-thinking, claude-opus-4-5-thinking), Gemini (gemini-3-flash, gemini-3-pro) | Google OAuth |
+| **Codex** (OpenAI) | gpt-5.3-codex, gpt-5.1-codex-mini, gpt-5.2-codex, ... | OpenAI OAuth (PKCE) |
+| **Cursor** | claude-4.5-opus, claude-4.5-sonnet, gpt-5.2-codex, ... | Cursor OAuth |
+| **GitHub Copilot** | gpt-4.1, gpt-5, claude-sonnet-4.5, gemini-2.5-pro, ... | GitHub OAuth |
 
-Ngày cập nhật: 2026-02-25
-
-Tiêu chí theo yêu cầu:
-1. Hỗ trợ các công cụ. 
-2. Tích hợp sẵn cho Claude Code.
-3. Có nhiều mô hình code. 
-
-### So sánh nhanh
-
-| Tiêu chí | antigravity-claude-proxy | 9router | ai_proxy |
-|---|---|---|---|
-| Tool hỗ trợ (web search, web fetch, bash) | Có | Không | Có |
-| Các mô hình hỗ trợ | Antigravity | All | All |
-| Tích hợp Claude code CLI format | Có | Không | Có |
-
+Routing is automatic based on the model name prefix:
+- `cu/` hoặc `cursor/` → Cursor
+- `gh/` hoặc `github/` → GitHub Copilot
+- `claude-*` → Antigravity
+- `gemini-*` → Antigravity
+- `gpt-5*` hoặc `*codex*` → Codex
 
 ---
 
 ## Installation
 
-Clone the repository and install dependencies:
-
 ```bash
-git clone https://github.com/badri-s2001/antigravity-claude-proxy.git
-cd antigravity-claude-proxy
+git clone https://github.com/quangvan99/ai_proxy.git
+cd ai_proxy
 npm install
-npm start
 ```
 
 ---
 
 ## Quick Start
 
-### 1. Start the Proxy Server
+### 1. Start the server
 
 ```bash
 npm start
 ```
 
-The server runs on `http://localhost:8386` by default.
-
-### 2. Add Google Account(s)
-
-Add your Google account via OAuth:
+Server chạy tại `http://localhost:8386`.
 
 ```bash
-# Desktop (opens browser)
-npm run accounts:add
+# Background (daemon mode)
+./start.sh
 
-# Headless (Docker/SSH) - manual OAuth code entry
-npm run accounts:add -- --no-browser
-```
+# Stop
+./stop.sh
 
-> For full account management options, run `npm run accounts`.
-
-To use a custom port:
-
-```bash
+# Custom port
 PORT=3001 npm start
+
+# Debug mode
+npm start -- --dev-mode
 ```
 
-### 3. Verify It's Working
+### 2. Add accounts
+
+Thêm ít nhất 1 account cho provider bạn muốn dùng:
+
+```bash
+# Google (Antigravity)
+npm run accounts:add              # Desktop (mở browser)
+npm run accounts:add -- --no-browser  # Headless/SSH
+
+# Codex (OpenAI)
+npm run codex:accounts:add
+
+# Cursor
+npm run cursor:accounts:add
+
+# GitHub Copilot
+npm run github:accounts:add
+```
+
+### 3. Configure Claude Code
+
+Sửa file `~/.claude/settings.json`:
+
+```json
+{
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "test",
+    "ANTHROPIC_BASE_URL": "http://localhost:8386"
+  }
+}
+```
+
+Sau đó chạy `claude` như bình thường.
+
+---
+
+## Model Configuration
+
+Có 2 cách cấu hình: qua `~/.claude/settings.json` hoặc qua biến môi trường (`export`).
+
+### Claude (qua Antigravity)
+
+**settings.json:**
+```json
+{
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "test",
+    "ANTHROPIC_BASE_URL": "http://localhost:8386",
+    "ANTHROPIC_MODEL": "claude-sonnet-4-5-thinking",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-4-5-thinking",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-4-5-thinking",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-sonnet-4-5",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "claude-sonnet-4-5-thinking"
+  }
+}
+```
+
+**export:**
+```bash
+export ANTHROPIC_AUTH_TOKEN="test"
+export ANTHROPIC_BASE_URL="http://localhost:8386"
+export ANTHROPIC_MODEL="claude-sonnet-4-5-thinking"
+export ANTHROPIC_DEFAULT_OPUS_MODEL="claude-opus-4-5-thinking"
+export ANTHROPIC_DEFAULT_SONNET_MODEL="claude-sonnet-4-5-thinking"
+export ANTHROPIC_DEFAULT_HAIKU_MODEL="claude-sonnet-4-5"
+export CLAUDE_CODE_SUBAGENT_MODEL="claude-sonnet-4-5-thinking"
+```
+
+### Gemini
+
+**settings.json:**
+```json
+{
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "test",
+    "ANTHROPIC_BASE_URL": "http://localhost:8386",
+    "ANTHROPIC_MODEL": "gemini-3-pro-high",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "gemini-3-pro-high",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "gemini-3-flash",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "gemini-3-flash",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "gemini-3-flash"
+  }
+}
+```
+
+**export:**
+```bash
+export ANTHROPIC_AUTH_TOKEN="test"
+export ANTHROPIC_BASE_URL="http://localhost:8386"
+export ANTHROPIC_MODEL="gemini-3-pro-high"
+export ANTHROPIC_DEFAULT_OPUS_MODEL="gemini-3-pro-high"
+export ANTHROPIC_DEFAULT_SONNET_MODEL="gemini-3-flash"
+export ANTHROPIC_DEFAULT_HAIKU_MODEL="gemini-3-flash"
+export CLAUDE_CODE_SUBAGENT_MODEL="gemini-3-flash"
+```
+
+### Codex (OpenAI)
+
+**settings.json:**
+```json
+{
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "test",
+    "ANTHROPIC_BASE_URL": "http://localhost:8386",
+    "ANTHROPIC_MODEL": "gpt-5.1-codex",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "gpt-5.3-codex",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "gpt-5.3-codex",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "gpt-5.1-codex-mini",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "gpt-5.1-codex-mini"
+  }
+}
+```
+
+**export:**
+```bash
+export ANTHROPIC_AUTH_TOKEN="test"
+export ANTHROPIC_BASE_URL="http://localhost:8386"
+export ANTHROPIC_MODEL="gpt-5.3-codex"
+export ANTHROPIC_DEFAULT_OPUS_MODEL="gpt-5.3-codex"
+export ANTHROPIC_DEFAULT_SONNET_MODEL="gpt-5.3-codex"
+export ANTHROPIC_DEFAULT_HAIKU_MODEL="gpt-5.3-codex"
+export CLAUDE_CODE_SUBAGENT_MODEL="gpt-5.3-codex"
+```
+
+### GitHub Copilot
+
+**settings.json:**
+```json
+{
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "test",
+    "ANTHROPIC_BASE_URL": "http://localhost:8386",
+    "ANTHROPIC_MODEL": "gh/claude-sonnet-4.5",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "gh/claude-opus-4.1",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "gh/claude-sonnet-4.5",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "gh/claude-haiku-4.5",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "gh/claude-haiku-4.5"
+  }
+}
+```
+
+**export:**
+```bash
+export ANTHROPIC_AUTH_TOKEN="test"
+export ANTHROPIC_BASE_URL="http://localhost:8386"
+export ANTHROPIC_MODEL="gh/claude-sonnet-4.5"
+export ANTHROPIC_DEFAULT_OPUS_MODEL="gh/claude-opus-4.1"
+export ANTHROPIC_DEFAULT_SONNET_MODEL="gh/claude-sonnet-4.5"
+export ANTHROPIC_DEFAULT_HAIKU_MODEL="gh/claude-haiku-4.5"
+export CLAUDE_CODE_SUBAGENT_MODEL="gh/claude-haiku-4.5"
+```
+
+---
+
+## Account Management
+
+```bash
+# Google (Antigravity)
+npm run accounts           # Menu tương tác
+npm run accounts:list      # Xem danh sách
+npm run accounts:verify    # Kiểm tra token
+npm run accounts:remove    # Xóa account
+
+# Codex
+npm run codex:accounts     # Menu tương tác
+npm run codex:accounts:list
+npm run codex:accounts:remove
+npm run codex:accounts:clear
+
+# Cursor
+npm run cursor:accounts    # Menu tương tác
+npm run cursor:accounts:list
+npm run cursor:accounts:remove
+npm run cursor:accounts:clear
+
+# GitHub Copilot
+npm run github:accounts    # Menu tương tác
+npm run github:accounts:list
+npm run github:accounts:remove
+npm run github:accounts:clear
+```
+
+---
+
+## API Endpoints
+
+| Endpoint | Mô tả |
+|---|---|
+| `POST /v1/messages` | Anthropic Messages API (streaming + non-streaming) |
+| `GET /v1/models` | Danh sách models |
+| `GET /health` | Health check + trạng thái account pool |
+| `GET /account-limits` | Chi tiết quota và rate limit |
+| `POST /refresh-token` | Force refresh token |
 
 ```bash
 # Health check
 curl http://localhost:8386/health
 
-# Check account status and quota limits
+# Account status (dạng bảng)
 curl "http://localhost:8386/account-limits?format=table"
 ```
 
 ---
 
-## Using with Claude Code CLI
+## So sánh với các repo khác
 
-### Configure Claude Code
+| Tiêu chí | antigravity-claude-proxy | 9router | ai_proxy (repo này) |
+|---|---|---|---|
+| Tích hợp Claude Code | Có | Không | Có |
+| Hỗ trợ mô hình | Antigravity(Claude/Gemini) | All | All |
+| Tool support (WebSearch, Bash) | Có | Không | Có |
 
-Edit the Claude Code settings file:
-
-**macOS:** `~/.claude/settings.json`
-**Linux:** `~/.claude/settings.json`
-**Windows:** `%USERPROFILE%\.claude\settings.json`
-
-Add this configuration:
-
-```json
-{
-  "env": {
-    "ANTHROPIC_AUTH_TOKEN": "test",
-    "ANTHROPIC_BASE_URL": "http://localhost:8386",
-    "ANTHROPIC_MODEL": "claude-opus-4-5-thinking",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-4-5-thinking",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-4-5-thinking",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-sonnet-4-5",
-    "CLAUDE_CODE_SUBAGENT_MODEL": "claude-sonnet-4-5-thinking",
-    "ENABLE_EXPERIMENTAL_MCP_CLI": "true"
-  }
-}
-```
-
-Or to use Gemini models:
-
-```json
-{
-  "env": {
-    "ANTHROPIC_AUTH_TOKEN": "test",
-    "ANTHROPIC_BASE_URL": "http://localhost:8386",
-    "ANTHROPIC_MODEL": "gemini-3-pro-high[1m]",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": "gemini-3-pro-high[1m]",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL": "gemini-3-flash[1m]",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "gemini-3-flash[1m]",
-    "CLAUDE_CODE_SUBAGENT_MODEL": "gemini-3-flash[1m]",
-    "ENABLE_EXPERIMENTAL_MCP_CLI": "true"
-  }
-}
-```
-
-### Load Environment Variables
-
-Add the proxy settings to your shell profile:
-
-**macOS / Linux:**
-
-```bash
-echo 'export ANTHROPIC_BASE_URL="http://localhost:8386"' >> ~/.zshrc
-echo 'export ANTHROPIC_AUTH_TOKEN="test"' >> ~/.zshrc
-source ~/.zshrc
-```
-
-> For Bash users, replace `~/.zshrc` with `~/.bashrc`
-
-**Windows (PowerShell):**
-
-```powershell
-Add-Content $PROFILE "`n`$env:ANTHROPIC_BASE_URL = 'http://localhost:8386'"
-Add-Content $PROFILE "`$env:ANTHROPIC_AUTH_TOKEN = 'test'"
-. $PROFILE
-```
-
-**Windows (Command Prompt):**
-
-```cmd
-setx ANTHROPIC_BASE_URL "http://localhost:8386"
-setx ANTHROPIC_AUTH_TOKEN "test"
-```
-
-Restart your terminal for changes to take effect.
-
-### Run Claude Code
-
-```bash
-# Make sure the proxy is running first
-npm start
-
-# In another terminal, run Claude Code
-claude
-```
-
-> **Note:** If Claude Code asks you to select a login method, add `"hasCompletedOnboarding": true` to `~/.claude.json` (macOS/Linux) or `%USERPROFILE%\.claude.json` (Windows), then restart your terminal and try again.
-
-### Proxy Mode vs. Paid Mode
-
-Toggle in **Settings** → **Claude CLI**:
-
-| Feature | 🔌 Proxy Mode | 💳 Paid Mode |
-| :--- | :--- | :--- |
-| **Backend** | Local Server (Antigravity) | Official Anthropic Credits |
-| **Cost** | Free (Google Cloud) | Paid (Anthropic Credits) |
-| **Models** | Claude + Gemini | Claude Only |
-
-**Paid Mode** automatically clears proxy settings so you can use your official Anthropic account directly.
-
-### Multiple Claude Code Instances (Optional)
-
-To run both the official Claude Code and Antigravity version simultaneously, add this alias:
-
-**macOS / Linux:**
-
-```bash
-# Add to ~/.zshrc or ~/.bashrc
-alias claude-antigravity='CLAUDE_CONFIG_DIR=~/.claude-account-antigravity ANTHROPIC_BASE_URL="http://localhost:8386" ANTHROPIC_AUTH_TOKEN="test" command claude'
-```
-
-**Windows (PowerShell):**
-
-```powershell
-# Add to $PROFILE
-function claude-antigravity {
-    $env:CLAUDE_CONFIG_DIR = "$env:USERPROFILE\.claude-account-antigravity"
-    $env:ANTHROPIC_BASE_URL = "http://localhost:8386"
-    $env:ANTHROPIC_AUTH_TOKEN = "test"
-    claude
-}
-```
-
-Then run `claude` for official API or `claude-antigravity` for this proxy.
 
 ---
-
-
-
-
 
 ## License
 
