@@ -5,18 +5,110 @@
 
 import crypto from 'crypto';
 
-function extractTextBlocks(content) {
-    if (typeof content === 'string') return [content];
-    if (!Array.isArray(content)) return [String(content || '')];
+/**
+ * Strip cache_control fields from all message content blocks.
+ * Claude Code CLI sends cache_control on content blocks, but OpenAI Responses API
+ * rejects them. Must be called before any other processing.
+ */
+function cleanCacheControl(messages) {
+    if (!Array.isArray(messages)) return messages;
+    return messages.map(msg => {
+        if (!msg || typeof msg.content === 'string') return msg;
+        if (!Array.isArray(msg.content)) return msg;
+        return {
+            ...msg,
+            content: msg.content.map(block => {
+                if (!block || !block.cache_control) return block;
+                const { cache_control, ...rest } = block;
+                return rest;
+            })
+        };
+    });
+}
 
-    const texts = [];
-    for (const block of content) {
-        if (!block) continue;
-        if (block.type === 'text' && typeof block.text === 'string') {
-            texts.push(block.text);
+/**
+ * Sanitize JSON Schema for OpenAI Responses API compatibility.
+ * Strips unsupported keywords, flattens type arrays, resolves $refs.
+ */
+function sanitizeSchema(schema) {
+    if (!schema || typeof schema !== 'object') {
+        return { type: 'object', properties: { reason: { type: 'string', description: 'Reason for calling this tool' } }, required: ['reason'] };
+    }
+
+    // Handle array types: ["string", "null"] -> "string"
+    if (Array.isArray(schema)) return schema.map(sanitizeSchema);
+
+    let result = { ...schema };
+
+    // Flatten type arrays: { type: ["string", "null"] } -> { type: "string" }
+    if (Array.isArray(result.type)) {
+        const nonNull = result.type.filter(t => t !== 'null');
+        result.type = nonNull.length > 0 ? nonNull[0] : 'string';
+    }
+
+    // Convert $ref to plain object hint
+    if (result.$ref) {
+        const name = String(result.$ref).split('/').pop() || 'object';
+        return { type: 'object', description: result.description ? `${result.description} (See: ${name})` : `See: ${name}` };
+    }
+
+    // Merge allOf into flat schema
+    if (Array.isArray(result.allOf) && result.allOf.length > 0) {
+        const merged = { properties: {}, required: [] };
+        for (const sub of result.allOf) {
+            if (!sub || typeof sub !== 'object') continue;
+            if (sub.properties) Object.assign(merged.properties, sub.properties);
+            if (Array.isArray(sub.required)) merged.required.push(...sub.required);
+            for (const [k, v] of Object.entries(sub)) {
+                if (k !== 'properties' && k !== 'required' && !(k in merged)) merged[k] = v;
+            }
+        }
+        delete result.allOf;
+        if (Object.keys(merged.properties).length > 0) result.properties = { ...merged.properties, ...(result.properties || {}) };
+        if (merged.required.length > 0) result.required = [...new Set([...merged.required, ...(result.required || [])])];
+    }
+
+    // Flatten anyOf/oneOf: pick best option
+    for (const key of ['anyOf', 'oneOf']) {
+        if (Array.isArray(result[key]) && result[key].length > 0) {
+            const opts = result[key].filter(o => o && typeof o === 'object');
+            const best = opts.reduce((a, b) => {
+                const score = o => (o.type === 'object' || o.properties) ? 3 : (o.type === 'array' || o.items) ? 2 : (o.type && o.type !== 'null') ? 1 : 0;
+                return score(a) >= score(b) ? a : b;
+            }, opts[0]);
+            delete result[key];
+            if (best) {
+                for (const [k, v] of Object.entries(best)) {
+                    if (!(k in result) || k === 'type' || k === 'properties' || k === 'items') result[k] = v;
+                }
+            }
         }
     }
-    return texts;
+
+    // Strip unsupported keywords
+    const STRIP = ['additionalProperties', 'default', '$schema', '$defs', 'definitions',
+        '$ref', '$id', '$comment', 'minLength', 'maxLength', 'pattern', 'format',
+        'minItems', 'maxItems', 'examples', 'allOf', 'anyOf', 'oneOf', 'const'];
+    for (const k of STRIP) delete result[k];
+
+    // Recursively sanitize nested schemas
+    if (result.properties && typeof result.properties === 'object') {
+        const cleaned = {};
+        for (const [k, v] of Object.entries(result.properties)) cleaned[k] = sanitizeSchema(v);
+        result.properties = cleaned;
+    }
+    if (result.items) {
+        result.items = Array.isArray(result.items) ? result.items.map(sanitizeSchema) : sanitizeSchema(result.items);
+    }
+
+    // Validate required array only references existing properties
+    if (Array.isArray(result.required) && result.properties) {
+        const defined = new Set(Object.keys(result.properties));
+        result.required = result.required.filter(p => defined.has(p));
+        if (result.required.length === 0) delete result.required;
+    }
+
+    return result;
 }
 
 function toolResultToOutput(content) {
@@ -42,11 +134,13 @@ function toolResultToOutput(content) {
 export function convertAnthropicToCodexRequest(anthropicRequest) {
     const {
         model,
-        messages = [],
         system,
         tools,
         tool_choice
     } = anthropicRequest;
+
+    // [CRITICAL] Strip cache_control from all messages before processing
+    const messages = cleanCacheControl(anthropicRequest.messages || []);
 
     const result = {
         model,
@@ -56,7 +150,9 @@ export function convertAnthropicToCodexRequest(anthropicRequest) {
     };
 
     // System -> instructions
-    const CODEX_AGENT_PREFIX = `You are an autonomous coding agent running inside an agentic loop with full tool use enabled. Tools provided to you are REAL and will be executed — their results will be returned to you in subsequent turns. You MUST use tools to accomplish tasks; do not describe or simulate tool usage in text. When you need to read a file, call the tool. When you need to run a command, call the tool. When you need to search, call the tool. Never say "I would", "I will", "shall I proceed", "do you want me to", "should I", or ask any clarifying questions before acting. Never explain what you are about to do — just call the appropriate tool and do it. If multiple steps are needed, call one tool at a time and continue after receiving the result. Write complete, working code. If you encounter an error, fix it and continue autonomously.`;
+    const CODEX_AGENT_PREFIX = `You are an autonomous coding agent running inside an agentic loop with full tool use enabled. Tools provided to you are REAL and will be executed — their results will be returned to you in subsequent turns. You MUST use tools to accomplish tasks; do not describe or simulate tool usage in text. When you need to read a file, call the tool. When you need to run a command, call the tool. When you need to search, call the tool. Never say "I would", "I will", "shall I proceed", "do you want me to", "should I", or ask any clarifying questions before acting. Never explain what you are about to do — just call the appropriate tool and do it. If multiple steps are needed, call one tool at a time and continue after receiving the result. Write complete, working code. If you encounter an error, fix it and continue autonomously.
+
+IMPORTANT: For simple conversational messages (greetings, short questions that don't require files or commands), respond directly with text — do NOT spawn Task agents or call tools unnecessarily. Only use tools when actually needed to complete the task.`;
 
     if (system) {
         if (typeof system === 'string') {
@@ -72,6 +168,19 @@ export function convertAnthropicToCodexRequest(anthropicRequest) {
 
     if (!result.instructions) {
         result.instructions = CODEX_AGENT_PREFIX;
+    }
+
+    // Pre-scan messages to collect all WebSearch tool_use IDs
+    // so we can skip their corresponding tool_result blocks
+    const webSearchToolUseIds = new Set();
+    for (const msg of messages) {
+        if (!Array.isArray(msg.content)) continue;
+        for (const block of msg.content) {
+            if (block && block.type === 'tool_use' &&
+                (block.name === 'WebSearch' || block.name === 'web_search')) {
+                webSearchToolUseIds.add(block.id);
+            }
+        }
     }
 
     for (const msg of messages) {
@@ -115,11 +224,14 @@ export function convertAnthropicToCodexRequest(anthropicRequest) {
         }
 
         // Emit tool_use as function_call and tool_result as function_call_output
-        // These are top-level items in the OpenAI Responses API input array
+        // WebSearch tool_use/tool_result are skipped: Codex uses native web_search
+        // which has no round-trip, so these blocks have no equivalent in Codex history.
         if (hasToolBlocks) {
             for (const block of content) {
                 if (!block) continue;
                 if (block.type === 'tool_use') {
+                    // Skip WebSearch — Codex handles it natively, no function_call needed
+                    if (block.name === 'WebSearch' || block.name === 'web_search') continue;
                     result.input.push({
                         type: 'function_call',
                         call_id: block.id || `call_${crypto.randomBytes(8).toString('hex')}`,
@@ -127,6 +239,8 @@ export function convertAnthropicToCodexRequest(anthropicRequest) {
                         arguments: JSON.stringify(block.input || {})
                     });
                 } else if (block.type === 'tool_result') {
+                    // Skip tool_result for WebSearch calls
+                    if (webSearchToolUseIds.has(block.tool_use_id)) continue;
                     result.input.push({
                         type: 'function_call_output',
                         call_id: block.tool_use_id || block.id || `call_${crypto.randomBytes(8).toString('hex')}`,
@@ -139,7 +253,13 @@ export function convertAnthropicToCodexRequest(anthropicRequest) {
 
     if (Array.isArray(tools) && tools.length > 0) {
         const hasWebSearch = tools.some(t => t.name === 'WebSearch' || t.name === 'web_search');
-        const otherTools = tools.filter(t => t.name !== 'WebSearch' && t.name !== 'web_search');
+
+        // Filter out agent-spawning tools that Codex cannot handle properly
+        // Task/dispatch_agent cause Codex to spawn unnecessary subagents
+        const BLOCKED_TOOLS = new Set(['Task', 'dispatch_agent', 'computer', 'browser']);
+        const otherTools = tools.filter(t =>
+            t.name !== 'WebSearch' && t.name !== 'web_search' && !BLOCKED_TOOLS.has(t.name)
+        );
 
         result.tools = [];
 
@@ -154,7 +274,7 @@ export function convertAnthropicToCodexRequest(anthropicRequest) {
                 type: 'function',
                 name: t.name,
                 description: t.description,
-                parameters: t.input_schema
+                parameters: sanitizeSchema(t.input_schema)
             });
         }
     }
@@ -165,28 +285,23 @@ export function convertAnthropicToCodexRequest(anthropicRequest) {
             // Anthropic: "auto" | "any" | "none"
             if (tool_choice === 'any') {
                 result.tool_choice = 'required';
-            } else if (tool_choice === 'auto') {
-                // For Codex: force "required" when tools present to ensure tool use
-                result.tool_choice = result.tools && result.tools.length > 0 ? 'required' : 'auto';
             } else {
-                result.tool_choice = tool_choice; // "none"
+                result.tool_choice = tool_choice; // "auto" and "none" map directly
             }
         } else if (tool_choice && typeof tool_choice === 'object') {
             // Anthropic: { type: "tool", name: "tool_name" }
             if (tool_choice.type === 'tool' && tool_choice.name) {
                 result.tool_choice = { type: 'function', name: tool_choice.name };
             } else if (tool_choice.type === 'auto') {
-                result.tool_choice = result.tools && result.tools.length > 0 ? 'required' : 'auto';
+                result.tool_choice = 'auto';
             } else if (tool_choice.type === 'any') {
                 result.tool_choice = 'required';
             } else if (tool_choice.type === 'none') {
                 result.tool_choice = 'none';
             }
         }
-    } else if (result.tools && result.tools.length > 0) {
-        // Default to required when tools are present to force tool use
-        result.tool_choice = 'required';
     }
+    // Do NOT default to required — let Codex decide when to use tools
 
     return result;
 }
@@ -328,6 +443,7 @@ export async function collectCodexStreamToAnthropicResponse(response, model) {
                     toolCalls[itemId] = { callId, name: item.name || '', argumentParts: [] };
                     toolCallOrder.push(itemId);
                 }
+                // web_search_call: Codex handles it natively, skip
             }
 
             if (eventType === 'response.function_call_arguments.delta') {
@@ -407,6 +523,8 @@ export async function* streamCodexResponseToAnthropic(response, model) {
     let currentToolItemId = null;
     // item_id -> { callId, blockIndex }
     const toolBlockMap = {};
+    // track web_search_call item ids (handled natively by Codex, no round-trip needed)
+    const webSearchItemIds = new Set();
     let nextIndex = 0;
     let outputTokens = 0;
     let inputTokens = 0;
@@ -482,7 +600,9 @@ export async function* streamCodexResponseToAnthropic(response, model) {
 
             if (eventType === 'response.output_item.added') {
                 const item = chunk.item || chunk.data?.item;
-                if (item && item.type === 'function_call') {
+                if (!item) continue;
+
+                if (item.type === 'function_call') {
                     yield* ensureStarted();
 
                     // Close text block first if open
@@ -508,6 +628,11 @@ export async function* streamCodexResponseToAnthropic(response, model) {
                             input: {}
                         }
                     };
+                }
+                // web_search_call: Codex handles it internally, no tool_result needed.
+                // We track the item_id so we can ignore web_search_call.* lifecycle events.
+                if (item.type === 'web_search_call') {
+                    webSearchItemIds.add(item.id || '');
                 }
             }
 
