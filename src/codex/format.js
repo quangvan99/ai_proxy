@@ -111,6 +111,43 @@ function sanitizeSchema(schema) {
     return result;
 }
 
+/**
+ * OpenAI function tools require top-level parameters to be an object schema.
+ * Some MCP tools expose empty schemas (`{}`), which must be normalized.
+ */
+function normalizeFunctionParameters(schema) {
+    if (!schema || typeof schema !== 'object' || Array.isArray(schema)) {
+        return { type: 'object', properties: {} };
+    }
+
+    const result = { ...schema };
+
+    // Keep compatibility for non-object top-level schemas by wrapping them.
+    if (result.type && result.type !== 'object') {
+        return {
+            type: 'object',
+            properties: {
+                input: result
+            },
+            required: ['input']
+        };
+    }
+
+    if (!result.type) result.type = 'object';
+
+    if (!result.properties || typeof result.properties !== 'object' || Array.isArray(result.properties)) {
+        result.properties = {};
+    }
+
+    if (Array.isArray(result.required)) {
+        const allowed = new Set(Object.keys(result.properties));
+        result.required = result.required.filter(key => allowed.has(key));
+        if (result.required.length === 0) delete result.required;
+    }
+
+    return result;
+}
+
 function toolResultToOutput(content) {
     if (typeof content === 'string') return content;
     if (Array.isArray(content)) {
@@ -270,11 +307,13 @@ IMPORTANT: For simple conversational messages (greetings, short questions that d
 
         // Convert remaining function tools normally
         for (const t of otherTools) {
+            const rawSchema = t.input_schema || t.function?.input_schema || t.function?.parameters || t.parameters;
+            const parameters = normalizeFunctionParameters(sanitizeSchema(rawSchema));
             result.tools.push({
                 type: 'function',
                 name: t.name,
                 description: t.description,
-                parameters: sanitizeSchema(t.input_schema)
+                parameters
             });
         }
     }
