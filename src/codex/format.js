@@ -163,6 +163,63 @@ function toolResultToOutput(content) {
     return '';
 }
 
+function toDataUrl(mediaType, data) {
+    if (!data) return null;
+    const mime = mediaType || 'image/jpeg';
+    return `data:${mime};base64,${data}`;
+}
+
+function toCodexImagePart(block) {
+    if (!block || block.type !== 'image') return null;
+    const source = block.source || {};
+    const detail = block.detail;
+
+    if (source.type === 'base64' && source.data) {
+        const imagePart = {
+            type: 'input_image',
+            image_url: toDataUrl(source.media_type, source.data)
+        };
+        if (detail) imagePart.detail = detail;
+        return imagePart;
+    }
+
+    if (source.type === 'url' && source.url) {
+        const imagePart = {
+            type: 'input_image',
+            image_url: source.url
+        };
+        if (detail) imagePart.detail = detail;
+        return imagePart;
+    }
+
+    return null;
+}
+
+function toCodexFilePart(block) {
+    if (!block || block.type !== 'document') return null;
+    const source = block.source || {};
+
+    if (source.type === 'base64' && source.data) {
+        const filePart = {
+            type: 'input_file',
+            file_data: source.data
+        };
+        if (source.filename) filePart.filename = source.filename;
+        return filePart;
+    }
+
+    if (source.type === 'url' && source.url) {
+        const filePart = {
+            type: 'input_file',
+            file_url: source.url
+        };
+        if (source.filename) filePart.filename = source.filename;
+        return filePart;
+    }
+
+    return null;
+}
+
 /**
  * Convert Anthropic request to OpenAI Responses API format
  * @param {Object} anthropicRequest
@@ -241,6 +298,18 @@ IMPORTANT: For simple conversational messages (greetings, short questions that d
                             type: role === 'user' ? 'input_text' : 'output_text',
                             text: block.text
                         });
+                        continue;
+                    }
+
+                    const imagePart = toCodexImagePart(block);
+                    if (imagePart) {
+                        parts.push(imagePart);
+                        continue;
+                    }
+
+                    const filePart = toCodexFilePart(block);
+                    if (filePart) {
+                        parts.push(filePart);
                     }
                     // thinking blocks: skip (not supported by OpenAI Responses API)
                 }

@@ -256,6 +256,69 @@ curl http://localhost:8386/health
 curl "http://localhost:8386/account-limits?format=table"
 ```
 
+### Gửi ảnh vào `/v1/messages`
+
+Khi hỏi về ảnh, **không gửi path local trong text** (ví dụ `/home/user/a.jpg`) vì model không tự đọc file từ máy host.  
+Hãy gửi ảnh trong `messages[].content[]` dưới dạng block `image`.
+
+#### Cách 1: Ảnh local (base64)
+
+```bash
+IMG="/home/mtagi/Pictures/88bf4032-1c08-4b9f-b70b-89caba560cea.jpeg"
+MIME=$(file --brief --mime-type "$IMG")
+B64=$(base64 < "$IMG" | tr -d '\n')
+
+jq -n --arg mime "$MIME" --arg data "$B64" '{
+  model: "gpt-5.1",
+  messages: [
+    {
+      role: "user",
+      content: [
+        { type: "text", text: "Trích xuất toàn bộ chữ trong ảnh này" },
+        {
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: $mime,
+            data: $data
+          }
+        }
+      ]
+    }
+  ]
+}' | curl http://localhost:8386/v1/messages \
+  -H "Content-Type: application/json" \
+  -d @-
+```
+
+#### Cách 2: Ảnh từ URL
+
+```bash
+curl http://localhost:8386/v1/messages \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-5.1",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          { "type": "text", "text": "Mô tả ảnh này và trích xuất nội dung chữ nếu có" },
+          {
+            "type": "image",
+            "source": {
+              "type": "url",
+              "url": "/home/mtagi/Pictures/88bf4032-1c08-4b9f-b70b-89caba560cea.jpeg",
+              "media_type": "image/jpeg"
+            }
+          }
+        ]
+      }
+    ]
+  }'
+```
+
+Lưu ý: URL phải truy cập được từ phía server proxy. Nếu URL private, dùng signed URL hoặc gửi base64.
+
 ---
 
 ## So sánh với các repo khác
